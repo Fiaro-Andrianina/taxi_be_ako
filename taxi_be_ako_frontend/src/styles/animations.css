@@ -1,0 +1,29 @@
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.65; transform: scale(1.08); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-fadeIn  { animation: fadeIn 0.3s ease both; }
+.animate-fadeUp  { animation: fadeUp 0.4s ease both; }
+.animate-slideIn { animation: slideIn 0.3s ease both; }
+.animate-pulse   { animation: pulse 2s infinite; }
+.animate-spin    { animation: spin 1s linear infinite; }
