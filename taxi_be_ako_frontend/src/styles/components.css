@@ -608,6 +608,20 @@
    ROUTE RESULTS
    ============================== */
 
+.route-result {
+  display: grid;
+  gap: 16px;
+  padding: 18px 18px 16px;
+  background: #fff;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+}
+
+[data-theme="dark"] .route-result {
+  background: var(--surface-2);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 .route-header {
   display: grid;
   grid-template-columns: minmax(110px, 0.8fr) minmax(150px, 1fr);
@@ -718,6 +732,11 @@
   border-radius: var(--radius);
 }
 
+[data-theme="dark"] .route-line-info {
+  background: var(--surface-3);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 .route-line-info span {
   margin-bottom: 4px;
   color: var(--ink-500);
@@ -758,6 +777,13 @@
   transition: box-shadow var(--transition-fast), transform var(--transition-fast);
 }
 
+[data-theme="dark"] .instruction-segment,
+[data-theme="dark"] .instruction-transfer,
+[data-theme="dark"] .instruction-walk {
+  background: var(--surface-3);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 .instruction-segment:hover,
 .instruction-transfer:hover,
 .instruction-walk:hover {
@@ -769,6 +795,7 @@
   background: linear-gradient(180deg, #fffaeb, #fff7d6);
   border-color: var(--accent-200);
   border-left-color: var(--accent-400);
+  color: #3b2a06;
   min-width: 0;
 }
 
@@ -776,7 +803,53 @@
   background: linear-gradient(180deg, #fffaf2, #fff3df);
   border-color: #e7c18a;
   border-left-color: #7A4D12;
+  color: #3f2a11;
   min-width: 0;
+}
+
+.instruction-transfer.highlight-transfer strong,
+.instruction-walk.highlight-walk strong {
+  color: #2f2205;
+}
+
+.instruction-transfer.highlight-transfer .transfer-details,
+.instruction-transfer.highlight-transfer .transfer-options,
+.instruction-walk.highlight-walk .transfer-details {
+  color: #665324;
+}
+
+.instruction-transfer.highlight-transfer .transfer-label {
+  color: #7a4f00;
+  font-weight: 700;
+}
+
+[data-theme="dark"] .instruction-transfer.highlight-transfer {
+  background: linear-gradient(180deg, rgba(72, 48, 9, 0.92), rgba(51, 37, 12, 0.92));
+  border-color: rgba(245, 158, 11, 0.38);
+  border-left-color: var(--warning);
+  color: #fff3d0;
+}
+
+[data-theme="dark"] .instruction-walk.highlight-walk {
+  background: linear-gradient(180deg, rgba(61, 43, 23, 0.92), rgba(43, 33, 23, 0.92));
+  border-color: rgba(231, 193, 138, 0.34);
+  border-left-color: #d69a45;
+  color: #fff0dc;
+}
+
+[data-theme="dark"] .instruction-transfer.highlight-transfer strong,
+[data-theme="dark"] .instruction-walk.highlight-walk strong {
+  color: #fff7df;
+}
+
+[data-theme="dark"] .instruction-transfer.highlight-transfer .transfer-details,
+[data-theme="dark"] .instruction-transfer.highlight-transfer .transfer-options,
+[data-theme="dark"] .instruction-walk.highlight-walk .transfer-details {
+  color: #f2dca8;
+}
+
+[data-theme="dark"] .instruction-transfer.highlight-transfer .transfer-label {
+  color: #ffd37a;
 }
 
 .instruction-header {
