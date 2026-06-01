@@ -3,7 +3,7 @@ import { useLanguage } from '../LanguageContext';
 import { translations } from '../SettingsView';
 import FALLBACK_DATA from '../data/fallback';
 import { buildApiError, api } from '../utils/api';
-import { buildTrajetFromAlternative, suggestLinesForRoute, findFullLine, buildLocalTrajet } from '../utils/lines';
+import { buildTrajetFromAlternative, suggestLinesForRoute, findFullLine, buildLocalTrajet, normalizeSearchValue } from '../utils/lines';
 import { alignArretsList, fetchOsmBusStopIndex, resolveArretCoordinates } from '../utils/stopGeocoding';
 
 // Prépare les données hors-ligne en alignant les arrêts fallback avec l'index OSM.
@@ -37,6 +37,12 @@ function normalizeArretCoordinates(arret) {
     latitude: arret.latitude ?? lat,
     longitude: arret.longitude ?? lng,
   };
+}
+
+function findArretIdByName(arrets, stopName) {
+  if (!stopName) return null;
+  const normalizedTarget = normalizeSearchValue(stopName);
+  return arrets.find((a) => normalizeSearchValue(a.nom) === normalizedTarget)?.id || null;
 }
 
 // Vérifie que l'arrêt possède des coordonnées valides utilisables sur la carte.
@@ -294,8 +300,8 @@ export function useAppLogic() {
       return;
     }
 
-    const departId = Number(depart) || arrets.find((a) => a.nom.toLowerCase() === depart.toLowerCase())?.id;
-    const arriveeId = Number(arrivee) || arrets.find((a) => a.nom.toLowerCase() === arrivee.toLowerCase())?.id;
+    const departId = Number(depart) || findArretIdByName(arrets, depart);
+    const arriveeId = Number(arrivee) || findArretIdByName(arrets, arrivee);
     if (!departId || !arriveeId) {
       setRouteError(t.nom_arret_inconnu || 'Nom d\'arrêt inconnu. Vérifiez les noms saisis.');
       return;
