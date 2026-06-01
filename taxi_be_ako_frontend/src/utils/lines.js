@@ -63,9 +63,35 @@ export function lineContainsStop(line, stopId, stopName) {
   return getLineStops(line).some((item) => {
     const a = item.arret || item;
     if (stopId && a.id === stopId) return true;
-    if (stopName && a.nom && a.nom.toLowerCase() === stopName.toLowerCase()) return true;
+    if (stopName && a.nom) {
+      const normalizedStop = normalizeSearchValue(a.nom);
+      const normalizedName = normalizeSearchValue(stopName);
+      return normalizedStop === normalizedName || normalizedStop.includes(normalizedName);
+    }
     return false;
   });
+}
+
+export function findStopByName(arrets, stopName) {
+  if (!stopName) return null;
+  const normalizedTarget = normalizeSearchValue(stopName);
+  if (!normalizedTarget) return null;
+
+  const normalizedStops = arrets.map((a) => ({
+    item: a,
+    name: normalizeSearchValue(a.nom || ''),
+  }));
+
+  const exactMatch = normalizedStops.find((entry) => entry.name === normalizedTarget);
+  if (exactMatch) return exactMatch.item;
+
+  const startsWithMatch = normalizedStops.find((entry) => entry.name.startsWith(normalizedTarget));
+  if (startsWithMatch) return startsWithMatch.item;
+
+  const containsMatch = normalizedStops.find((entry) => entry.name.includes(normalizedTarget));
+  if (containsMatch) return containsMatch.item;
+
+  return normalizedStops[0]?.item || null;
 }
 
 export function getStopKey(stop) {

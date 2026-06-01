@@ -3,7 +3,7 @@ import { useLanguage } from '../LanguageContext';
 import { translations } from '../SettingsView';
 import FALLBACK_DATA from '../data/fallback';
 import { buildApiError, api } from '../utils/api';
-import { buildTrajetFromAlternative, suggestLinesForRoute, findFullLine, buildLocalTrajet, normalizeSearchValue } from '../utils/lines';
+import { buildTrajetFromAlternative, suggestLinesForRoute, findFullLine, buildLocalTrajet, findStopByName } from '../utils/lines';
 import { alignArretsList, fetchOsmBusStopIndex, resolveArretCoordinates } from '../utils/stopGeocoding';
 
 // Prépare les données hors-ligne en alignant les arrêts fallback avec l'index OSM.
@@ -40,9 +40,8 @@ function normalizeArretCoordinates(arret) {
 }
 
 function findArretIdByName(arrets, stopName) {
-  if (!stopName) return null;
-  const normalizedTarget = normalizeSearchValue(stopName);
-  return arrets.find((a) => normalizeSearchValue(a.nom) === normalizedTarget)?.id || null;
+  const arret = findStopByName(arrets, stopName);
+  return arret?.id || null;
 }
 
 // Vérifie que l'arrêt possède des coordonnées valides utilisables sur la carte.
