@@ -61,6 +61,7 @@ npm start
 - **Deconnexion:** Bouton dans la sidebar pour se deconnecter
 - **Protection des routes:** L'application principale n'est accessible qu'apres authentification
 - **Session Django:** Utilise le systeme d'authentification par session de Django
+- **Requêtes front-end:** Le frontend envoie les cookies de session avec `credentials: 'include'` pour que la connexion Django reste valide.
 
 ## Configuration du port
 

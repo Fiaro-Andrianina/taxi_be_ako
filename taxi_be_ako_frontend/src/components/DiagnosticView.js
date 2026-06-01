@@ -1,6 +1,28 @@
 import Metric from './Metric';
 
-export default function DiagnosticView({ connection, arrets, lignes, onRefresh, t }) {
+export default function DiagnosticView({ connection, arrets, lignes, onRefresh, t, isAdmin }) {
+  // Version simple pour les utilisateurs réguliers (statut en ligne/hors ligne uniquement)
+  if (!isAdmin) {
+    return (
+      <section className="web-panel diagnostic-panel">
+        <div className="panel-title">
+          <span>{t.diagnostic}</span>
+          <h2>{t.etat_api}</h2>
+        </div>
+        <div className={`diagnostic-status ${connection.state}`}>
+          <strong>{connection.label}</strong>
+          <p>{connection.detail}</p>
+        </div>
+        <div className="web-alert">
+          {connection.state === 'online' 
+            ? 'Vous êtes connecté au service.' 
+            : 'Vous n\'êtes actuellement pas connecté au service.'}
+        </div>
+      </section>
+    );
+  }
+
+  // Version complète pour les administrateurs
   return (
     <section className="web-panel diagnostic-panel">
       <div className="panel-title">

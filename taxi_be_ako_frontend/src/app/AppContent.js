@@ -139,6 +139,7 @@ export default function AppContent() {
             lignes={lignes}
             onRefresh={refreshData}
             t={t}
+            isAdmin={showAdmin}
           />
         )}
         {view === 'admin' && showAdmin && (

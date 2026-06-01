@@ -53,6 +53,7 @@ export default function LoginView({ onLogin, t }) {
         const response = await fetch('/api/utilisateurs/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ username, email, password }),
         });
 
@@ -66,6 +67,7 @@ export default function LoginView({ onLogin, t }) {
         const loginResponse = await fetch('/api/login/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ username, password }),
         });
 
@@ -93,6 +95,7 @@ export default function LoginView({ onLogin, t }) {
         const response = await fetch('/api/login/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ username, password }),
         });
 

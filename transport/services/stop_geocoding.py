@@ -262,6 +262,7 @@ def nearest_osm_near(
 def pick_best_coords(
     stop_name: str,
     osm_index: dict[str, list[tuple[str, float, float]]],
+    current: tuple[float, float] | None = None,
     use_nominatim: bool = False,
 ) -> tuple[float, float, str] | None:
     n = norm(stop_name)
@@ -288,7 +289,8 @@ def pick_best_coords(
     if n in osm_index:
         items = [(label, la, ln) for label, la, ln in osm_index[n] if in_bbox(la, ln)]
         if items:
-            label, lat, lng = min(items, key=lambda x: dist_m((x[1], x[2]), TANA_CENTER))
+            anchor = current if current is not None else TANA_CENTER
+            label, lat, lng = min(items, key=lambda x: dist_m((x[1], x[2]), anchor))
             return lat, lng, f"osm:{label}"
 
     arret_tok = tokens(stop_name)
@@ -348,7 +350,15 @@ def resolve_arret_coordinates(
         except (urllib.error.URLError, TimeoutError, OSError):
             osm_index = {}
 
-    match = pick_best_coords(nom, osm_index, use_nominatim=use_nominatim)
+    current_coords = None
+    if latitude is not None and longitude is not None:
+        current_coords = (float(latitude), float(longitude))
+    match = pick_best_coords(
+        nom,
+        osm_index,
+        current=current_coords,
+        use_nominatim=use_nominatim,
+    )
     if not match:
         if latitude is not None and longitude is not None:
             return float(latitude), float(longitude), False, "db"

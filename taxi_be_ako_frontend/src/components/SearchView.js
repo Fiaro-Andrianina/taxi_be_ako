@@ -285,7 +285,7 @@ export default function SearchView({
                   key={`dep-${l.id}`}
                   type="button"
                   className="suggestion-chip"
-                  style={{ borderColor: getLineColor(l), color: getLineColor(l) }}
+                  style={{ borderColor: getLineColor(l) }}
                   onClick={() => onHighlightLine(l)}
                 >
                   {l.numero}
@@ -303,7 +303,7 @@ export default function SearchView({
                   key={`arr-${l.id}`}
                   type="button"
                   className="suggestion-chip"
-                  style={{ borderColor: getLineColor(l), color: getLineColor(l) }}
+                  style={{ borderColor: getLineColor(l) }}
                   onClick={() => onHighlightLine(l)}
                 >
                   {l.numero}

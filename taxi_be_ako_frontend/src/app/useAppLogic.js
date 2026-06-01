@@ -4,7 +4,7 @@ import { translations } from '../SettingsView';
 import FALLBACK_DATA from '../data/fallback';
 import { buildApiError, api } from '../utils/api';
 import { buildTrajetFromAlternative, suggestLinesForRoute, findFullLine, buildLocalTrajet } from '../utils/lines';
-import { alignArretsList, fetchOsmBusStopIndex } from '../utils/stopGeocoding';
+import { alignArretsList, fetchOsmBusStopIndex, resolveArretCoordinates } from '../utils/stopGeocoding';
 
 async function prepareFallbackData() {
   const osmIndex = await fetchOsmBusStopIndex();
@@ -23,6 +23,27 @@ async function prepareFallbackData() {
     arrets,
     correspondances: FALLBACK_DATA.correspondances || [],
   };
+}
+
+function normalizeArretCoordinates(arret) {
+  const lat = typeof arret.lat === 'number' ? arret.lat : arret.latitude;
+  const lng = typeof arret.lng === 'number' ? arret.lng : arret.longitude;
+  return {
+    ...arret,
+    lat,
+    lng,
+    latitude: arret.latitude ?? lat,
+    longitude: arret.longitude ?? lng,
+  };
+}
+
+function hasValidCoordinates(arret) {
+  return (
+    typeof arret.lat === 'number' &&
+    typeof arret.lng === 'number' &&
+    !Number.isNaN(arret.lat) &&
+    !Number.isNaN(arret.lng)
+  );
 }
 
 function applyOfflineRouteSearch({ departId, arriveeId, lignes, arrets, setTrajet, setHighlightedLine, setRouteSuggestions, setRouteError, t }) {
@@ -208,33 +229,22 @@ export function useAppLogic() {
         api('/api/sync/'),
         fetchOsmBusStopIndex(),
       ]);
-      const mergedArrets = (payload.arrets || []).map(arret => {
-        const hasCoords =
-          typeof arret.lat === 'number' &&
-          typeof arret.lng === 'number' &&
-          !Number.isNaN(arret.lat) &&
-          !Number.isNaN(arret.lng);
-        if (hasCoords) {
-          return {
-            ...arret,
-            latitude: arret.latitude ?? arret.lat,
-            longitude: arret.longitude ?? arret.lng,
-            lat: arret.lat,
-            lng: arret.lng,
-          };
-        }
+      const mergedArrets = (payload.arrets || []).map((arret) => {
+        const normalized = normalizeArretCoordinates(arret);
         const fallback =
-          FALLBACK_DATA.arrets.find(f => f.id === arret.id) ||
+          FALLBACK_DATA.arrets.find((f) => f.id === arret.id) ||
           (arret.nom
             ? FALLBACK_DATA.arrets.find(
-                f => f.nom && f.nom.toLowerCase() === arret.nom.toLowerCase()
+                (f) => f.nom && f.nom.toLowerCase() === arret.nom.toLowerCase()
               )
             : null);
         return fallback
-          ? { ...arret, lat: fallback.lat, lng: fallback.lng, latitude: fallback.lat, longitude: fallback.lng }
-          : arret;
-      }).filter(a => typeof a.lat === 'number' && typeof a.lng === 'number');
-      const alignedArrets = alignArretsList(mergedArrets, osmIndex);
+          ? normalizeArretCoordinates({ ...normalized, ...fallback })
+          : normalized;
+      });
+      const alignedArrets = mergedArrets
+        .map((arret) => resolveArretCoordinates(arret, osmIndex))
+        .filter(hasValidCoordinates);
       setData({
         lignes: payload.lignes?.length ? payload.lignes : [],
         arrets: alignedArrets,

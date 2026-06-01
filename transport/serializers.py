@@ -13,19 +13,27 @@ def arret_to_dict(arret, osm_index=None):
     Returns:
         dict: Dictionnaire contenant les données de l'arrêt
     """
-    lat, lng, corrected, _source = resolve_arret_coordinates(
-        arret.nom,
-        arret.latitude,
-        arret.longitude,
-        osm_index=osm_index,
-    )
+    lat = arret.latitude
+    lng = arret.longitude
+    coords_corrigees = False
+
+    if lat is None or lng is None:
+        lat, lng, coords_corrigees, _source = resolve_arret_coordinates(
+            arret.nom,
+            arret.latitude,
+            arret.longitude,
+            osm_index=osm_index,
+        )
+
     return {
         "id": arret.id,
         "nom": arret.nom,
         "lat": lat,
         "lng": lng,
+        "latitude": lat,
+        "longitude": lng,
         "est_correspondance": arret.est_correspondance(),
-        "coords_corrigees": corrected,
+        "coords_corrigees": coords_corrigees,
     }
 
 

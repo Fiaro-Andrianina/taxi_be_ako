@@ -20,14 +20,30 @@ export function LineRouteLayer({ line, arrets, active }) {
   return (
     <>
       {positions.length > 1 && (
-        <Polyline
-          positions={positions}
-          color={color}
-          weight={active ? 6 : 4}
-          opacity={1}
-          dashArray={active ? null : '8, 6'}
-          zIndexOffset={active ? 100 : 50}
-        />
+        <>
+          {/* Background line for better visibility */}
+          {!active && (
+            <Polyline
+              positions={positions}
+              color="#ffffff"
+              weight={8}
+              opacity={0.4}
+              dashArray="8, 6"
+              zIndexOffset={48}
+              interactive={false}
+            />
+          )}
+          <Polyline
+            positions={positions}
+            color={color}
+            weight={active ? 6 : 5}
+            opacity={active ? 1 : 0.85}
+            dashArray={active ? null : '8, 6'}
+            zIndexOffset={active ? 100 : 50}
+            lineCap="round"
+            lineJoin="round"
+          />
+        </>
       )}
       {stops.map((item, index) => {
         const stop = item.arret || item;

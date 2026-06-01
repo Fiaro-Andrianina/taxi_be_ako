@@ -22,7 +22,9 @@ export default function Sidebar({
       <nav className="sidebar-nav">
         <button className={view === 'search' ? 'active' : ''} onClick={showSearch}>{t.recherche}</button>
         <button className={view === 'lines' ? 'active' : ''} onClick={() => setView('lines')}>{t.lignes}</button>
-        <button className={view === 'diagnostic' ? 'active' : ''} onClick={() => setView('diagnostic')}>{t.diagnostic}</button>
+        {showAdmin && (
+          <button className={view === 'diagnostic' ? 'active' : ''} onClick={() => setView('diagnostic')}>{t.diagnostic}</button>
+        )}
         {showAdmin && (
           <button className={view === 'admin' ? 'active' : ''} onClick={() => setView('admin')}>{t.admin}</button>
         )}

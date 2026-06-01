@@ -33,8 +33,8 @@ export default function LinesView({ lignes, onHighlightLine, onOpenLine, highlig
             line={line}
             t={t}
             active={highlightedLineId === line.id}
-            onClick={() => onHighlightLine(line)}
-            onDetails={() => onOpenLine(line)}
+            onClick={() => onOpenLine(line)}
+            onHighlight={() => onHighlightLine(line)}
           />
         ))}
       </div>
