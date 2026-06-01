@@ -1,8 +1,8 @@
 import React from 'react';
 import ConnectionCard from '../components/ConnectionCard';
 
+// Composant de navigation latérale et affichage de l'état de connexion.
 export default function Sidebar({
-  view,
   setView,
   showSearch,
   showAdmin,

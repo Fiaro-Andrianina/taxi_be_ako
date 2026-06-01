@@ -7,6 +7,7 @@ import { EnhancedTripMarkers, buildMarkerOffsets } from './MapMarkers';
 import { getLineRoutePositions, getTripPositions, getSegmentRoutePositions } from '../utils/positions';
 import { parseTrajetSegments, lineContainsStop, findFullLine } from '../utils/lines';
 
+// Affiche l'interface de calibration d'un arrêt lorsque l'administrateur déplace un marqueur.
 function CalibrationOverlay({
   arrets, calibratingArretId, calibPickedLatLng,
   setCalibratingArret, pickCalibratedCoords, saveCalibratedArret, t,
@@ -102,6 +103,7 @@ function CalibrationOverlay({
   );
 }
 
+// Composant principal de mise en page qui affiche la carte Leaflet et le panneau de contenu.
 export default function MainLayout({
   arrets, lignes, trajet, highlightedLine, onMapMove, children, t,
   calibratingArretId, calibPickedLatLng, setCalibratingArret,

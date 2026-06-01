@@ -11,6 +11,7 @@ SearchState: TypeAlias = tuple[int, int | None]
 HeapEntry: TypeAlias = tuple[float, float, int, int]
 
 
+# Convertit le code interne de ligne (-1) en None pour l'état de recherche.
 def _decode_line(line_id: int) -> int | None:
     return None if line_id == NO_LINE else line_id
 
@@ -36,10 +37,12 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
     WALK_SPEED_KMH = 5
     MAX_WALKING_TRANSFER_KM = 0.35
 
+    # Initialise l'algorithme A* et prépare un cache de correspondances.
     def __init__(self) -> None:
         super().__init__()
         self._correspondance_cache: dict[tuple, Correspondance] = {}
 
+    # Étend le graphe existant avec des arêtes piétonnes entre arrêts proches.
     def construire_graphe(self):
         graphe = super().construire_graphe()
         lignes_par_arret: dict[int, set[int]] = {arret_id: set() for arret_id in self.arrets}
@@ -64,6 +67,7 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
 
         return graphe
 
+    # Analyse le chemin A* pour détecter les transferts de ligne et réutiliser le cache.
     def trouver_correspondances(self, chemin):
         """
         Identifie les correspondances le long du chemin avec mise en cache.
@@ -96,6 +100,7 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
             correspondances.append(correspondance)
         return correspondances
 
+    # Exécute l'algorithme A* pour rechercher le chemin de coût minimum.
     def dijkstra(self, start_id, end_id):
         """
         Algorithme A* pour trouver le chemin de coût minimal.
@@ -157,6 +162,7 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
 
         raise TrajetIntrouvable("Aucun trajet disponible")
 
+    # Reconstruit le chemin final en remontant les parents enregistrés pendant la recherche.
     def _reconstruire_chemin(
         self,
         parents: dict[SearchState, tuple[SearchState, Edge]],
@@ -188,6 +194,7 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
         chemin.reverse()
         return chemin
 
+    # Calcule le trajet complet après recherche A*, puis construit le résultat de sortie.
     def calculer_trajet(self, depart_id, arrivee_id):
         """
         Calcule un trajet optimisé en utilisant l'algorithme A*.
@@ -252,6 +259,7 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
             "distance_marche_km": round(walking_distance_km, 2),
         }
 
+    # Formate les arrêts et les lignes du chemin A* pour l'affichage dans l'interface.
     def _etapes(self, arret_ids, chemin):
         etapes = []
 

@@ -17,11 +17,13 @@ class AlgorithmeSearchBaseline:
         graphe: Graphe sous forme de dictionnaire {arret_id: [Edge, ...]}
     """
 
+    # Initialise les données en mémoire et construit le graphe de transport.
     def __init__(self) -> None:
         self.arrets: dict[int, Arret] = {arret.id: arret for arret in Arret.objects.all()}
         self.lignes: dict[int, Ligne] = {ligne.id: ligne for ligne in Ligne.objects.all()}
         self.graphe = self.construire_graphe()
 
+    # Construit le graphe de transport à partir de l'ordre des arrêts sur chaque ligne.
     def construire_graphe(self):
         """
         Construit le graphe de transport à partir des lignes et arrêts.
@@ -54,6 +56,7 @@ class AlgorithmeSearchBaseline:
 
         return graphe
 
+    # Prépare une version sérialisable du graphe pour l'API ou l'affichage.
     def get_graphe(self):
         """
         Retourne le graphe de transport sous forme de dictionnaire standardisé.
@@ -86,6 +89,7 @@ class AlgorithmeSearchBaseline:
             "aretes": aretes,
         }
 
+    # Recherche le chemin avec le moins d'arrêts en utilisant une file FIFO.
     def bfs(self, start_id, end_id):
         """
         Recherche en largeur (BFS) pour trouver le plus court chemin en nombre d'arrêts.
@@ -135,6 +139,7 @@ class AlgorithmeSearchBaseline:
         chemin.reverse()
         return chemin
 
+    # Analyse un chemin pour détecter les changements de ligne et créer les correspondances.
     def trouver_correspondances(self, chemin):
         """
         Identifie les correspondances nécessaires le long du chemin.
@@ -158,6 +163,7 @@ class AlgorithmeSearchBaseline:
             correspondances.append(correspondance)
         return correspondances
 
+    # Calcule le trajet complet à partir du chemin BFS, puis sauvegarde l'historique.
     def calculer_trajet(self, depart_id, arrivee_id):
         """
         Calcule un trajet entre deux arrêts en utilisant l'algorithme BFS.
@@ -211,6 +217,7 @@ class AlgorithmeSearchBaseline:
             "distance_km": distance_km,
         }
 
+    # Formate chaque arrêt du trajet pour l'interface en indiquant les lignes et transferts.
     def _etapes(self, arret_ids, chemin):
         """
         Formate les étapes du trajet pour l'affichage.

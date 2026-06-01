@@ -6,6 +6,7 @@ import { buildApiError, api } from '../utils/api';
 import { buildTrajetFromAlternative, suggestLinesForRoute, findFullLine, buildLocalTrajet } from '../utils/lines';
 import { alignArretsList, fetchOsmBusStopIndex, resolveArretCoordinates } from '../utils/stopGeocoding';
 
+// Prépare les données hors-ligne en alignant les arrêts fallback avec l'index OSM.
 async function prepareFallbackData() {
   const osmIndex = await fetchOsmBusStopIndex();
   const arrets = alignArretsList(
@@ -25,6 +26,7 @@ async function prepareFallbackData() {
   };
 }
 
+// Normalise les propriétés de coordonnées pour garantir lat/lng et latitude/longitude.
 function normalizeArretCoordinates(arret) {
   const lat = typeof arret.lat === 'number' ? arret.lat : arret.latitude;
   const lng = typeof arret.lng === 'number' ? arret.lng : arret.longitude;
@@ -37,6 +39,7 @@ function normalizeArretCoordinates(arret) {
   };
 }
 
+// Vérifie que l'arrêt possède des coordonnées valides utilisables sur la carte.
 function hasValidCoordinates(arret) {
   return (
     typeof arret.lat === 'number' &&
@@ -46,6 +49,7 @@ function hasValidCoordinates(arret) {
   );
 }
 
+// Tente de résoudre une recherche d'itinéraire avec les données locales en mode hors-ligne.
 function applyOfflineRouteSearch({ departId, arriveeId, lignes, arrets, setTrajet, setHighlightedLine, setRouteSuggestions, setRouteError, t }) {
   const localTrajet = buildLocalTrajet(lignes, arrets, departId, arriveeId);
   if (localTrajet) {
@@ -78,6 +82,7 @@ function applyOfflineRouteSearch({ departId, arriveeId, lignes, arrets, setTraje
   return false;
 }
 
+// Hook principal du frontend qui centralise l'état de l'application et toutes les actions.
 export function useAppLogic() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -119,6 +124,7 @@ export function useAppLogic() {
     checkAuth();
   }, []);
 
+  // Vérifie si l'utilisateur est déjà connecté en appelant l'API /api/me/.
   async function checkAuth() {
     try {
       const response = await fetch('/api/me/', { credentials: 'include' });
@@ -135,12 +141,14 @@ export function useAppLogic() {
     }
   }
 
+  // Gère la connexion en stockant l'utilisateur et en activant l'affichage admin si nécessaire.
   function handleLogin(userData) {
     setUser(userData);
     const role = userData?.profil?.role;
     setShowAdmin(role === 'admin');
   }
 
+  // Déconnecte l'utilisateur et réinitialise l'état de l'application.
   async function handleLogout() {
     try {
       await fetch('/api/logout/', { method: 'POST', credentials: 'include' });
@@ -158,6 +166,7 @@ export function useAppLogic() {
     setView('search');
   }
 
+  // Enregistre les coordonnées choisies sur la carte lors de la calibration d'un arrêt.
   function pickCalibratedCoords(ll) {
     const lat = typeof ll?.lat === 'number' ? ll.lat : parseFloat(ll?.lat);
     const lng = typeof ll?.lng === 'number' ? ll.lng : parseFloat(ll?.lng);
@@ -165,6 +174,7 @@ export function useAppLogic() {
     setCalibPickedLatLng([lat, lng]);
   }
 
+  // Sauvegarde les nouvelles coordonnées d'un arrêt calibré vers le backend.
   async function saveCalibratedArret() {
     const arret = arrets.find(a => a.id === calibratingArretId);
     if (!arret) return;
@@ -216,6 +226,7 @@ export function useAppLogic() {
     }
   }, [user]);
 
+  // Recharge les données du backend et aligne les arrêts avec l'index OSM.
   async function refreshData() {
     setConnection({
       state: 'loading',
@@ -266,6 +277,7 @@ export function useAppLogic() {
     }
   }
 
+  // Lance la recherche de trajet, appelle l'API, et gère les modes en ligne/hors-ligne.
   async function handleSearch(event) {
     event.preventDefault();
     setTrajet(null);
@@ -383,10 +395,12 @@ export function useAppLogic() {
     }
   }
 
+  // Sélectionne une ligne pour la mettre en surbrillance sur la carte.
   function highlightLineOnMap(line) {
     setHighlightedLine(findFullLine(line, lignes) || line);
   }
 
+  // Affiche une alternative de trajet calculée localement sur la carte.
   function showAlternativeOnMap(alternative) {
     if (!routeSuggestions?.depStop || !routeSuggestions?.arrStop) return;
     const syntheticTrajet = buildTrajetFromAlternative({
@@ -400,6 +414,7 @@ export function useAppLogic() {
     setView('search');
   }
 
+  // Ouvre la page de détail d'une ligne en sélectionnant la ligne et en la mettant en surbrillance.
   function openLine(line) {
     const fullLine = findFullLine(line, lignes) || line;
     setSelectedLine(fullLine);
@@ -407,6 +422,7 @@ export function useAppLogic() {
     setView('line');
   }
 
+  // Retourne à l'écran de recherche principal.
   function showSearch() {
     setSelectedLine(null);
     setHighlightedLine(null);

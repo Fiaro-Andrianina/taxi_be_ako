@@ -7,6 +7,7 @@ import { createMapMarkerIcon, FootstepMarkers } from './MapMarkers';
 
 
 
+// Affiche la ligne de bus sélectionnée sur la carte avec son tracé et ses arrêts.
 export function LineRouteLayer({ line, arrets, active }) {
   const routeData = useMemo(
     () => (line ? getLineRouteData(line, arrets) : { positions: [], hasTrace: false }),
@@ -71,6 +72,7 @@ export function LineRouteLayer({ line, arrets, active }) {
   );
 }
 
+// Affiche un segment de trajet, soit bus soit marche, avec le style approprié.
 export function SegmentRoutePolyline({ segment, arrets, lignes, segIdx }) {
   const routeData = useMemo(
     () => getSegmentRouteData(segment, arrets, lignes),
@@ -110,6 +112,7 @@ export function SegmentRoutePolyline({ segment, arrets, lignes, segIdx }) {
   );
 }
 
+// Affiche tous les segments d'un trajet complet sur la carte.
 export function TripRouteLayers({ trajet, arrets, lignes }) {
   const segments = useMemo(() => parseTrajetSegments(trajet), [trajet]);
   if (!segments.length) return null;
@@ -129,6 +132,7 @@ export function TripRouteLayers({ trajet, arrets, lignes }) {
   );
 }
 
+// Gère les clics sur la carte pour enregistrer les coordonnées lors de la calibration.
 export function MapClickHandler({ onPick }) {
   useMapEvents({
     click(e) {

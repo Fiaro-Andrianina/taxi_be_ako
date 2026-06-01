@@ -11,6 +11,7 @@ import Sidebar from './Sidebar';
 import { useAppLogic } from './useAppLogic';
 import { api } from '../utils/api';
 
+// Composant racine qui assemble la sidebar, la carte et les vues selon l'état.
 export default function AppContent() {
   const {
     user,
