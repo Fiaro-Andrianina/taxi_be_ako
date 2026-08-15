@@ -33,6 +33,7 @@ const COORDS = {
   Ambohimanarina: [-18.8605, 47.4785],
   Andoharanofotsy: [-18.8955, 47.5485],
   Antohomadinika: [-18.9142, 47.5318],
+  Ambatomainty: [-18.935, 47.515],  // Approximative coordonnées pour Ambatomainty
 };
 
 const ARRET_IDS = Object.fromEntries(
@@ -179,6 +180,14 @@ const LIGNE_DEFS = [
     couleur: '#9c27b0',
     description: 'Ligne nord-est reliant Ambodivona à Ivandry.',
     arrets: ['Ambodivona', 'Antanimena', 'Amboditsiry', 'Ivandry'],
+  },
+  {
+    id: 13,
+    numero: '154',
+    nom: 'Amboditsiry - Ambatomainty',
+    couleur: '#006064',
+    description: 'Ligne reliant Amboditsiry à Ambatomainty via le centre-ville.',
+    arrets: ['Amboditsiry', 'Analakely', 'Ambatomainty'],
   },
 ];
 

@@ -126,7 +126,7 @@ export default function MainLayout({
     () => tripSegments.flatMap((seg) => getSegmentRoutePositions(seg, arrets, lignes)),
     [tripSegments, arrets, lignes]
   );
-  const focusPositions = resolvedHighlightedLine
+  const focusPositions = resolvedHighlightedLine && !trajet
     ? linePositions
     : segmentPositions.length
       ? segmentPositions
@@ -229,16 +229,16 @@ export default function MainLayout({
              const off = markerOffsets.get(arret.id) || { x: 0, y: 0 };
              const shiftLabelX = off.x > 0 ? 6 : off.x < 0 ? -6 : 0;
 
-             const safeName = getSafeArretName(arret).replace(/[<>&"']/g, (ch) => (
-               { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[ch]
-             ));
+             const rawName = getSafeArretName(arret);
+             const safeName = rawName.replace(/[<>&"']/g, (ch) => (
+                { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[ch]
+              ));
 
-              return (
-                <Marker
-                  key={arret.id || Math.random()}
-                  position={[arret.lat, arret.lng]}
-                  title={safeName}
-                  icon={L.divIcon({
+                return (
+                  <Marker
+                    key={arret.id || Math.random()}
+                    position={[arret.lat, arret.lng]}
+                   icon={L.divIcon({
                     className: 'standard-stop-marker',
                     html: `<div class="ss-wrapper" style="transform:translate(${off.x}px,${off.y}px)">
                             <div class="ss-dot"></div>

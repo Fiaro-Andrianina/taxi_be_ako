@@ -18,9 +18,9 @@ export default function LineDetail({ line, onBack, t }) {
         </div>
         <div className="stop-list">
           {getLineStops(line).map((item, index) => {
-            const stopName = item.arret?.nom || item.nom || `Arrêt #${item.id || '?'}`;
+            const stopName = item.arret?.nom || item.nom || `Arrêt #${item.arret?.id || '?'}`;
             return (
-              <div className="stop-row" key={item.id || `${line.id}-${index}`}>
+              <div className="stop-row" key={item.arret?.id || `${line.id}-${index}`}>
                 <span>{item.ordre || index + 1}</span>
                 <strong>{stopName}</strong>
               </div>

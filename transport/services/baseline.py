@@ -89,7 +89,8 @@ class AlgorithmeSearchBaseline:
             "aretes": aretes,
         }
 
-    # Recherche le chemin avec le moins d'arrêts en utilisant une file FIFO.
+    # Recherche en largeur (BFS) - explore tous les voisins avant de s'enfoncer dans un chemin.
+    # Cet algorithme trouve le chemin avec le MOINS D'ARRÊTS (pas forcément le plus court en km).
     def bfs(self, start_id, end_id):
         """
         Recherche en largeur (BFS) pour trouver le plus court chemin en nombre d'arrêts.
@@ -107,7 +108,8 @@ class AlgorithmeSearchBaseline:
         if start_id == end_id:
             return []
 
-        # parent: node_id -> (prev_node_id, edge)
+        # BFS : file d'attente (FIFO) pour explorer les arrêts par niveau.
+        # Chaque arrêt est visité une seule fois grâce au dictionnaire `parent`.
         parent = {start_id: (None, None)}
         queue = deque([start_id])
 
@@ -126,7 +128,8 @@ class AlgorithmeSearchBaseline:
         if end_id not in parent:
             raise TrajetIntrouvable("Aucun trajet disponible")
 
-        # Reconstruction
+        # Retour en arrière depuis l'arrivée jusqu'au départ en suivant les parents.
+        # On remonte le chemin puis on l'inverse pour avoir l'ordre correct.
         chemin = []
         node = end_id
         while node != start_id:
@@ -139,7 +142,8 @@ class AlgorithmeSearchBaseline:
         chemin.reverse()
         return chemin
 
-    # Analyse un chemin pour détecter les changements de ligne et créer les correspondances.
+    # Analyse un chemin pour détecter les changements de ligne (où il faut changer de bus).
+    # Une correspondance intervient quand la ligne change entre deux arêtes consécutives.
     def trouver_correspondances(self, chemin):
         """
         Identifie les correspondances nécessaires le long du chemin.
@@ -163,7 +167,11 @@ class AlgorithmeSearchBaseline:
             correspondances.append(correspondance)
         return correspondances
 
-    # Calcule le trajet complet à partir du chemin BFS, puis sauvegarde l'historique.
+    # calcule_trajet : fonction principale qui orchestre toute la recherche.
+    # 1. Vérifie que les arrêts existent
+    # 2. Lance BFS pour trouver le chemin
+    # 3. Calcule distance, durée, correspondances
+    # 4. Sauvegarde l'historique et retourne le résultat formaté
     def calculer_trajet(self, depart_id, arrivee_id):
         """
         Calcule un trajet entre deux arrêts en utilisant l'algorithme BFS.

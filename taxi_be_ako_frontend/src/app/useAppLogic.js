@@ -3,7 +3,7 @@ import { useLanguage } from '../LanguageContext';
 import { translations } from '../SettingsView';
 import FALLBACK_DATA from '../data/fallback';
 import { buildApiError, api } from '../utils/api';
-import { buildTrajetFromAlternative, suggestLinesForRoute, findFullLine, buildLocalTrajet, findStopByName } from '../utils/lines';
+import { buildTrajetFromAlternative, suggestLinesForRoute, findFullLine, buildLocalTrajet, findStopByName, buildSuggestionsFromBackend404 } from '../utils/lines';
 import { alignArretsList, fetchOsmBusStopIndex, resolveArretCoordinates } from '../utils/stopGeocoding';
 
 // Prépare les données hors-ligne en alignant les arrêts fallback avec l'index OSM.
@@ -61,7 +61,10 @@ function applyOfflineRouteSearch({ departId, arriveeId, lignes, arrets, setTraje
     setTrajet(localTrajet);
     setRouteSuggestions(null);
     setRouteError('');
-    setHighlightedLine(findFullLine(localTrajet.lignes[0], lignes) || localTrajet.lignes[0]);
+    // Ne pas mettre en surbrillance pour les trajets directs
+    if (!localTrajet.direct) {
+      setHighlightedLine(findFullLine(localTrajet.lignes[0], lignes) || localTrajet.lignes[0]);
+    }
     return true;
   }
 
@@ -254,8 +257,16 @@ export function useAppLogic() {
                 (f) => f.nom && f.nom.toLowerCase() === arret.nom.toLowerCase()
               )
             : null);
+        // Important: conserver l'ID backend pour les appels API /api/trajet/.
+        // Les IDs fallback ne correspondent pas forcément à la base Django.
         return fallback
-          ? normalizeArretCoordinates({ ...normalized, ...fallback })
+          ? normalizeArretCoordinates({
+              ...normalized,
+              latitude: fallback.latitude ?? fallback.lat ?? normalized.latitude,
+              longitude: fallback.longitude ?? fallback.lng ?? normalized.longitude,
+              lat: fallback.lat ?? fallback.latitude ?? normalized.lat,
+              lng: fallback.lng ?? fallback.longitude ?? normalized.lng,
+            })
           : normalized;
       });
       const alignedArrets = mergedArrets
@@ -314,7 +325,9 @@ export function useAppLogic() {
       });
       setTrajet(result);
       setRouteSuggestions(null);
-      if (result.lignes?.length === 1) {
+      // Ne pas mettre en surbrillance pour les trajets directs - on veut afficher le segment seulement
+      const direct = result?.direct === true || (result.nb_changements || 0) === 0;
+      if (result.lignes?.length === 1 && !direct) {
         setHighlightedLine(findFullLine(result.lignes[0], lignes) || result.lignes[0]);
       }
       if (user) {
@@ -371,8 +384,20 @@ export function useAppLogic() {
         }
       }
 
-      if (msg.toLowerCase().includes('trajet') || msg.toLowerCase().includes('introuvable') || msg.toLowerCase().includes('404')) {
-        const suggestions = suggestLinesForRoute(lignes, departId, arriveeId, arrets);
+      // Cas 3 : trajet indisponible — utiliser les données structurées du backend
+      // si disponibles, sinon fallback sur la recherche locale.
+      const backendData = error?.data;
+      let suggestions = null;
+
+      if (backendData?.cas === 3 && backendData?.lignes_depart) {
+        // Le backend a retourné les lignes au départ/arrivée avec détails
+        suggestions = buildSuggestionsFromBackend404(backendData, arrets);
+      } else if (msg.toLowerCase().includes('trajet') || msg.toLowerCase().includes('introuvable') || msg.toLowerCase().includes('404')) {
+        // Fallback : recherche locale d'alternatives
+        suggestions = suggestLinesForRoute(lignes, departId, arriveeId, arrets);
+      }
+
+      if (suggestions) {
         setRouteSuggestions(suggestions);
         // Affichage immédiat de la meilleure alternative sur la carte.
         if (suggestions?.alternatives?.length > 0) {
@@ -385,6 +410,7 @@ export function useAppLogic() {
           if (syntheticTrajet) {
             setTrajet(syntheticTrajet);
             setHighlightedLine(null);
+            setRouteError('');
           }
         }
       } else {

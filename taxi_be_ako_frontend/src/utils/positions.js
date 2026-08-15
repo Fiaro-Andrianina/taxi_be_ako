@@ -16,24 +16,24 @@ export function getSegmentPositions(segment, arrets) {
 export function resolveStopCoords(stop, arrets = []) {
   if (!stop) return null;
 
+  // Dépaqueter les objets LigneArret (ex: { ordre, arret: { id, nom, lat, lng } })
+  const resolved = stop.arret && (stop.ordre || stop.ordre === 0) ? stop.arret : stop;
+
   let synced = null;
-  if (stop.id) {
-    synced = arrets.find((a) => a.id === stop.id);
+  if (resolved.id) {
+    synced = arrets.find((a) => a.id === resolved.id);
   }
-  if (!synced && stop.nom) {
-    const nom = stop.nom.toLowerCase();
+  if (!synced && resolved.nom) {
+    const nom = resolved.nom.toLowerCase();
     synced = arrets.find((a) => a.nom && a.nom.toLowerCase() === nom);
   }
 
-  const base = synced ? { ...synced, nom: synced.nom || stop?.nom } : stop;
-  const lat = base.lat ?? base.latitude;
-  const lng = base.lng ?? base.longitude;
+  const base = synced ? { ...synced, nom: synced.nom || resolved?.nom } : resolved;
+  const lat = Number(base.lat ?? base.latitude);
+  const lng = Number(base.lng ?? base.longitude);
 
   if (
-    typeof lat === 'number' &&
-    typeof lng === 'number' &&
-    !Number.isNaN(lat) &&
-    !Number.isNaN(lng) &&
+    isFinite(lat) && isFinite(lng) &&
     lat >= -90 &&
     lat <= 90 &&
     lng >= -180 &&
@@ -99,18 +99,93 @@ export function getSegmentRouteData(segment, arrets, lignes = []) {
     };
   }
 
-  const basePositions = (segment.stops || [])
+const basePositions = (segment.stops || [])
     .map((s) => getStopPosition(s.arret, arrets))
     .filter(Boolean);
   const fullLine = findFullLine(segment.line, lignes);
   const lineStops = getLineStops(fullLine);
-  if (!fullLine || !lineStops.length || (segment.stops || []).length < 2) {
+  if (!fullLine || !lineStops.length) {
+    return { positions: basePositions, hasTrace: basePositions.length >= 2 };
+  }
+  // Moins de 2 arrêts : essayer de compléter avec les arrêts de la ligne
+  if ((segment.stops || []).length < 2) {
+    // Si on a au moins 1 arrêt, essayer d'ajouter un arrêt adjacent sur la ligne
+    if (segment.stops?.length === 1 && segment.stops[0]?.arret) {
+      const firstStop = segment.stops[0].arret;
+      const firstIdx = getLineStopIndex(fullLine, firstStop);
+      if (firstIdx >= 0 && firstIdx < lineStops.length - 1) {
+        // Essayer le prochain arrêt dans le sens normal de la ligne
+        const nextStop = lineStops[firstIdx + 1]?.arret || lineStops[firstIdx + 1];
+        const nextStopPos = getStopPosition(nextStop, arrets);
+        if (nextStopPos) {
+          const extendedPositions = [...basePositions, nextStopPos];
+          return { positions: extendedPositions, hasTrace: false };
+        }
+      }
+    }
     return { positions: basePositions, hasTrace: false };
   }
 
   const firstIdx = getLineStopIndex(fullLine, segment.stops[0]?.arret);
   const lastIdx = getLineStopIndex(fullLine, segment.stops[segment.stops.length - 1]?.arret);
   if (firstIdx < 0 || lastIdx < 0) {
+    // Indexation impossible : essayer par nom d'arrêt
+    const firstStop = segment.stops[0]?.arret;
+    const lastStop = segment.stops[segment.stops.length - 1]?.arret;
+    const firstStopName = firstStop?.nom?.toLowerCase();
+    const lastStopName = lastStop?.nom?.toLowerCase();
+
+    let useFirstIdx = firstIdx;
+    let useLastIdx = lastIdx;
+
+    if (firstStopName && lastStopName) {
+      const lineStopNames = lineStops.map(s => (s.arret || s)?.nom?.toLowerCase()).filter(Boolean);
+      if (useFirstIdx < 0) useFirstIdx = lineStopNames.indexOf(firstStopName);
+      if (useLastIdx < 0) useLastIdx = lineStopNames.indexOf(lastStopName);
+    }
+
+    // Les deux indices trouvés (par ID ou par nom) → découpe normale
+    if (useFirstIdx >= 0 && useLastIdx >= 0) {
+      const sliceStart = Math.min(useFirstIdx, useLastIdx);
+      const sliceEnd = Math.max(useFirstIdx, useLastIdx);
+      const slicedStops = lineStops.slice(sliceStart, sliceEnd + 1);
+      const travelingBackward = useFirstIdx > useLastIdx;
+      if (travelingBackward) slicedStops.reverse();
+
+      const slicedLine = {
+        ...fullLine,
+        arrets: slicedStops,
+      };
+      const routeData = getLineRouteData(slicedLine, arrets);
+      return {
+        positions: routeData.positions.length >= 2 ? routeData.positions : basePositions,
+        hasTrace: routeData.hasTrace || basePositions.length >= 2,
+      };
+    }
+
+    // Si le premier arrêt n'est pas sur la ligne (ex: correspondance),
+    // on ne peut pas utiliser la trace de la ligne — elle commencerait
+    // au mauvais endroit. On laisse le OSRM/sliced-fallback gérer.
+    if (useFirstIdx < 0 && useLastIdx >= 0) {
+      return { positions: basePositions, hasTrace: false };
+    }
+
+    // Un seul indice trouvé (le premier arrêt uniquement) :
+    // découper depuis l'arrêt trouvé jusqu'à la fin de la ligne.
+    if (useFirstIdx >= 0 || useLastIdx >= 0) {
+      const sliceA = useFirstIdx >= 0 ? Math.max(0, useFirstIdx - 2) : 0;
+      const sliceB = useLastIdx >= 0 ? Math.min(lineStops.length - 1, useLastIdx + 2) : lineStops.length - 1;
+      const slStart = Math.min(sliceA, sliceB);
+      const slEnd = Math.max(sliceA, sliceB);
+      const slicedStops = lineStops.slice(slStart, slEnd + 1);
+      const sLine = { ...fullLine, arrets: slicedStops };
+      const rd = getLineRouteData(sLine, arrets);
+      if (rd.positions.length >= 2) {
+        return { positions: rd.positions, hasTrace: rd.hasTrace };
+      }
+    }
+
+    // Aucun fallback possible → ligne droite entre les arrêts
     return { positions: basePositions, hasTrace: false };
   }
 

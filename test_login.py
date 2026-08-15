@@ -28,10 +28,11 @@ def fetch_json(opener, url, headers=None, method='GET', data=None):
         print(f"JSON decode error for {url}: {e}")
         return None
 
-opener = build_opener()
-url = f"{BASE_URL}/api/login/"
-payload = {"username": "admin", "password": "admin123"}
-headers = {"Content-Type": "application/json"}
-print("Sending login request...")
-result = fetch_json(opener, url, headers=headers, method='POST', data=payload)
-print(f"Result: {result}")
+if __name__ == "__main__":
+    opener = build_opener()
+    url = f"{BASE_URL}/api/login/"
+    payload = {"username": "admin", "password": "admin123"}
+    headers = {"Content-Type": "application/json"}
+    print("Sending login request...")
+    result = fetch_json(opener, url, headers=headers, method='POST', data=payload)
+    print(f"Result: {result}")

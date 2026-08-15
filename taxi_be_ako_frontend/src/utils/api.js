@@ -25,7 +25,10 @@ export async function api(path, options) {
   const text = await response.text();
   const payload = text ? JSON.parse(text) : {};
   if (!response.ok) {
-    throw new Error(payload.detail || `Erreur API ${response.status}`);
+    const err = new Error(payload.detail || `Erreur API ${response.status}`);
+    err.status = response.status;
+    err.data = payload;
+    throw err;
   }
   return payload;
 }

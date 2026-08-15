@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Marker, Polyline, useMapEvents } from 'react-leaflet';
-import { getLineColor, getLineStops, findFullLine, parseTrajetSegments } from '../utils/lines';
-import { getLineRouteData, getSegmentRouteData, getStopPosition } from '../utils/positions';
+import { getLineColor, getLineStops, parseTrajetSegments } from '../utils/lines';
+import { getLineRouteData, getStopPosition, getTripPositions } from '../utils/positions';
 import { useRoadRoutePositions } from '../hooks/useRoadRoute';
 import { createMapMarkerIcon, FootstepMarkers } from './MapMarkers';
 
@@ -28,7 +28,7 @@ export function LineRouteLayer({ line, arrets, active }) {
               positions={positions}
               color="#ffffff"
               weight={8}
-              opacity={0.4}
+          opacity={0.2}
               dashArray="8, 6"
               zIndexOffset={48}
               interactive={false}
@@ -64,7 +64,7 @@ export function LineRouteLayer({ line, arrets, active }) {
               color,
               size: isTerminus ? 34 : 28,
             })}
-            title={`${ordre}. ${stopName} — Ligne ${line.numero}`}
+            title={stopName}
           />
         );
       })}
@@ -72,42 +72,71 @@ export function LineRouteLayer({ line, arrets, active }) {
   );
 }
 
-// Affiche un segment de trajet, soit bus soit marche, avec le style approprié.
-export function SegmentRoutePolyline({ segment, arrets, lignes, segIdx }) {
-  const routeData = useMemo(
-    () => getSegmentRouteData(segment, arrets, lignes),
-    [segment, arrets, lignes]
-  );
-  const positions = useRoadRoutePositions(routeData.positions, !routeData.hasTrace);
-  if (!segment || positions.length < 2) return null;
-  if (segment.mode === 'walk') {
+// Extrait [lat, lng] d'un objet arrêt (ArretObject du backend)
+function extractCoords(stop) {
+  const inner = stop?.arret && (stop.ordre || stop.ordre === 0) ? stop.arret : stop;
+  const lat = Number(inner?.lat ?? inner?.latitude);
+  const lng = Number(inner?.lng ?? inner?.longitude);
+  return (isFinite(lat) && isFinite(lng)) ? [lat, lng] : null;
+}
+
+// Découpe les positions du fallback OSRM entre deux points pour le suivi routier
+function sliceFallback(fallbackPositions, fromPos, toPos) {
+  if (!fallbackPositions?.length || fallbackPositions.length < 2 || !fromPos || !toPos) return null;
+  const dist = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+  const firstIdx = fallbackPositions.reduce((best, p, i) =>
+    dist(p, fromPos) < dist(fallbackPositions[best], fromPos) ? i : best, 0);
+  const lastIdx = fallbackPositions.reduce((best, p, i) =>
+    dist(p, toPos) < dist(fallbackPositions[best], toPos) ? i : best, 0);
+  const from = Math.min(firstIdx, lastIdx);
+  const to = Math.max(firstIdx, lastIdx);
+  if (to <= from) return null;
+  return fallbackPositions.slice(from, to + 1);
+}
+
+export function SegmentRoutePolyline({ segment, arrets, segIdx, fallbackPositions }) {
+  // Positions des arrêts du segment (extraites directement du step.arret)
+  const stopPositions = useMemo(() => {
+    if (!segment?.stops?.length) return [];
+    return segment.stops.map((s) => extractCoords(s.arret || s)).filter(Boolean);
+  }, [segment]);
+
+  // Marche à pied : ligne droite entre les deux arrêts
+  if (segment?.mode === 'walk') {
+    const posFrom = segment.from ? extractCoords(segment.from) : null;
+    const posTo = segment.to ? extractCoords(segment.to) : null;
+    if (!posFrom || !posTo) return null;
     return (
       <>
         <Polyline
           key={`walk-${segIdx}`}
-          positions={positions}
+          positions={[posFrom, posTo]}
           color="#7A4D12"
           weight={5}
           opacity={0.95}
           dashArray="2, 12"
           zIndexOffset={100}
         />
-        <FootstepMarkers positions={positions} />
+        <FootstepMarkers positions={[posFrom, posTo]} />
       </>
     );
   }
 
-  const displayLine = findFullLine(segment.line, lignes) || segment.line;
-  const color = getLineColor(displayLine);
+  if (!segment || stopPositions.length < 2) return null;
+
+  const firstPos = stopPositions[0];
+  const lastPos = stopPositions[stopPositions.length - 1];
+  const positions = sliceFallback(fallbackPositions, firstPos, lastPos) || stopPositions;
+
+  const color = segment.color || getLineColor(segment.line);
 
   return (
     <Polyline
-      key={`seg-${segment.line?.id || segIdx}`}
+      key={`seg-${segment.line?.id || segIdx}-${color}`}
       positions={positions}
       color={color}
       weight={6}
-      opacity={0.96}
-      zIndexOffset={100}
+      opacity={1}
     />
   );
 }
@@ -115,19 +144,23 @@ export function SegmentRoutePolyline({ segment, arrets, lignes, segIdx }) {
 // Affiche tous les segments d'un trajet complet sur la carte.
 export function TripRouteLayers({ trajet, arrets, lignes }) {
   const segments = useMemo(() => parseTrajetSegments(trajet), [trajet]);
-  if (!segments.length) return null;
+  const rawFallback = useMemo(() => getTripPositions(trajet, arrets), [trajet, arrets]);
+  const fallbackPositions = useRoadRoutePositions(rawFallback, true);
 
   return (
     <>
-      {segments.map((segment, segIdx) => (
-        <SegmentRoutePolyline
-          key={`${segment.mode || 'seg'}-${segment.line?.id || segIdx}`}
-          segment={segment}
-          arrets={arrets}
-          lignes={lignes}
-          segIdx={segIdx}
-        />
-      ))}
+      {segments.map((segment, segIdx) => {
+        const segColor = segment.color || getLineColor(segment.line);
+        return (
+          <SegmentRoutePolyline
+            key={`${segment.mode || 'seg'}-${segment.line?.id || segIdx}-${segColor}`}
+            segment={segment}
+            arrets={arrets}
+            segIdx={segIdx}
+            fallbackPositions={fallbackPositions}
+          />
+        );
+      })}
     </>
   );
 }

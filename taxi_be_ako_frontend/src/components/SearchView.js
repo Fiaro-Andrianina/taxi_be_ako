@@ -101,22 +101,24 @@ export default function SearchView({
         </div>
 {routeSuggestions && (
   <div className="route-error-block">
-    <div className="metric error">{routeError}</div>
+    {routeError ? <div className="metric error">{routeError}</div> : null}
     {routeSuggestions.alternatives?.length > 0 && (
       <div className="route-suggestions">
-        <p>{t.trajet_indisponible || t.aucun_trajet_trouve || 'Trajet indisponible sur cet axe.'}</p>
+        <p>{routeError ? t.trajet_indisponible || t.aucun_trajet_trouve || 'Trajet indisponible sur cet axe.' : t.alternatives_disponibles || 'Aucun trajet direct, voir les alternatives suivantes.'}</p>
         {routeSuggestions.alternatives?.length > 0 && (
           <div>
             <strong>{t.correspondances_possibles || 'Correspondances possibles'} :</strong>
             <div className="route-alternatives">
               {routeSuggestions.alternatives.map((alt, index) => {
-                const transferName = getStopNameValue(alt.transferStop) || t.arret_correspondance || 'Arrêt de correspondance';
-                const estimatedDuration = alt.metrics?.totalMinutes ?? 30;
-                const estimatedDistance = alt.metrics?.distanceKm ?? 8;
-                const marcheDuration = alt.metrics?.walkMinutes ?? 0;
-                const marcheDistance = (marcheDuration / 60) * 5;
-                const boardStop = alt.metrics?.boardStop || alt.departLine.arrets?.[0]?.arret;
-                const alightStop = alt.metrics?.alightStop || alt.arriveeLine.arrets?.slice(-1)[0]?.arret;
+const transferName = getStopNameValue(alt.transferStop) || t.arret_correspondance || 'Arrêt de correspondance';
+                 const estimatedDuration = alt.metrics?.totalMinutes ?? 30;
+                 const estimatedDistance = alt.metrics?.distanceKm ?? 8;
+                 const walkDepMinutes = alt.metrics?.walkDepMinutes ?? 0;
+                 const walkArrMinutes = alt.metrics?.walkArrMinutes ?? 0;
+                 const walkDepKm = alt.metrics?.walkDepKm ?? 0;
+                 const walkArrKm = alt.metrics?.walkArrKm ?? 0;
+                 const boardStop = alt.metrics?.boardStop || routeSuggestions?.depStop;
+                 const alightStop = alt.metrics?.alightStop || routeSuggestions?.arrStop;
                 
                 const nbChangements = alt.metrics?.nbChangements ?? 1;
 
@@ -151,14 +153,14 @@ export default function SearchView({
                     
                     <div className="route-instructions">
                       {/* Marche initiale si nécessaire */}
-                      {marcheDuration > 0 && (
+                      {walkDepMinutes > 0 && (
                         <div key={`walk-start-${index}`} className="instruction-walk highlight-walk">
                           <span className="walk-icon">👣</span>
                           <div>
                             <strong>{t.marche_jusqu_au_depart || 'Marchez jusqu\'au départ'}</strong>
                             <div className="transfer-details">
                               <span>
-                                {Math.round(marcheDistance * 1000)} m, {marcheDuration} min
+                                {Math.round(walkDepKm * 1000)} m, {walkDepMinutes} min
                               </span>
                             </div>
                           </div>
@@ -196,28 +198,19 @@ export default function SearchView({
                           </div>
                           <div key={`stop-2-${index}`} className="segment-stop stop-transfer">
                             <span className="stop-order-badge" style={{ backgroundColor: getLineColor(alt.departLine) }}>2</span>
-                            <span>{getStopNameValue(alt.transferStop.nom) || 'Transfert'}</span>
+                            <span>{transferName}</span>
                             <em className="stop-role">{t.correspondance_label || 'Correspondance'}</em>
                           </div>
                         </div>
                       </div>
                       
-                      {/* Transfert à pied si nécessaire */}
-                      {marcheDuration > 0 && (
-                        <div key={`transfer-walk-${index}`} className="instruction-transfer highlight-transfer">
-                          <span className="transfer-icon">🔄</span>
-                          <div>
-                            <strong>{t.changements}</strong> {getStopNameValue(alt.transferStop.nom) || 'Transfert'}
-                            {marcheDuration > 0 && (
-                              <div className="transfer-details">
-                                <span>
-                                  {t.marche_vers_ligne_suivante || 'Marche'} {marcheDuration} {t.min}
-                                </span>
-                              </div>
-                            )}
-                          </div>
+                      {/* Correspondance entre deux lignes */}
+                      <div key={`transfer-${index}`} className="instruction-transfer highlight-transfer">
+                        <span className="transfer-icon">🔄</span>
+                        <div>
+                          <strong>{t.changements}</strong> {transferName}
                         </div>
-                      )}
+                      </div>
                       
                       {/* Deuxième ligne de bus */}
                       <div key={`segment-2-${index}`} className="instruction-segment"
@@ -237,7 +230,7 @@ export default function SearchView({
                           </button>
                           {alt.arriveeLine.arrets && alt.arriveeLine.arrets.length > 0 && (
                             <span className="instruction-detail">
-                              {getStopNameValue(alt.transferStop.nom) || 'Départ'} 
+                              {transferName} 
                               → {getStopNameValue(alightStop) || t.destination}
                             </span>
                           )}
@@ -245,7 +238,7 @@ export default function SearchView({
                         <div className="segment-stops">
                           <div key={`stop-3-${index}`} className="segment-stop stop-depart">
                             <span className="stop-order-badge" style={{ backgroundColor: getLineColor(alt.arriveeLine) }}>1</span>
-                            <span>{getStopNameValue(alt.transferStop.nom) || 'Départ'}</span>
+                            <span>{transferName}</span>
                           </div>
                           <div key={`stop-4-${index}`} className="segment-stop stop-arrivee">
                             <span className="stop-order-badge" style={{ backgroundColor: getLineColor(alt.arriveeLine) }}>2</span>
@@ -256,14 +249,14 @@ export default function SearchView({
                       </div>
                       
                       {/* Marche finale si nécessaire */}
-                      {marcheDuration > 0 && (
+                      {walkArrMinutes > 0 && (
                         <div key={`walk-end-${index}`} className="instruction-walk highlight-walk">
                           <span className="walk-icon">👣</span>
                           <div>
                             <strong>{t.marche_jusqu_a_destination || 'Marchez jusqu\'à destination'}</strong>
                             <div className="transfer-details">
                               <span>
-                                {Math.round(marcheDistance * 1000)} m, {marcheDuration} min
+                                {Math.round(walkArrKm * 1000)} m, {walkArrMinutes} min
                               </span>
                             </div>
                           </div>

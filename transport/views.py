@@ -323,12 +323,48 @@ def trajet(request):
         arrivee_obj = Arret.objects.filter(nom__iexact=arrivee).first()
         if arrivee_obj is None:
             return JsonResponse({"detail": f"Arrêt d'arrivée introuvable: {arrivee}"}, status=400)
+
+        # Si l'arrêt n'est desservi par aucune ligne, chercher un arrêt voisin (mêmes coordonnées)
+        if not LigneArret.objects.filter(arret=depart_obj).exists():
+            voisin = (Arret.objects
+                      .filter(latitude=depart_obj.latitude, longitude=depart_obj.longitude)
+                      .exclude(id=depart_obj.id)
+                      .filter(lignearret__isnull=False)
+                      .distinct().first())
+            if voisin:
+                depart_obj = voisin
+        if not LigneArret.objects.filter(arret=arrivee_obj).exists():
+            voisin = (Arret.objects
+                      .filter(latitude=arrivee_obj.latitude, longitude=arrivee_obj.longitude)
+                      .exclude(id=arrivee_obj.id)
+                      .filter(lignearret__isnull=False)
+                      .distinct().first())
+            if voisin:
+                arrivee_obj = voisin
+
         depart_id, arrivee_id = depart_obj.id, arrivee_obj.id
 
     try:
         resultat = AlgorithmeRecherche().calculer_trajet(depart_id, arrivee_id)
     except TrajetIntrouvable as exc:
-        return JsonResponse({"detail": str(exc)}, status=404)
+        # Cas 3 : trajet indisponible — retourner les lignes au départ et à
+        # l'arrivée pour que le frontend puisse proposer des alternatives.
+        try:
+            depart_arret = Arret.objects.get(pk=depart_id)
+            arrivee_arret = Arret.objects.get(pk=arrivee_id)
+        except Arret.DoesNotExist:
+            return JsonResponse({"detail": str(exc), "cas": 3}, status=404)
+
+        dep_lines = Ligne.objects.filter(lignearret__arret_id=depart_id).distinct()
+        arr_lines = Ligne.objects.filter(lignearret__arret_id=arrivee_id).distinct()
+        return JsonResponse({
+            "detail": str(exc),
+            "cas": 3,
+            "depart": arret_to_dict(depart_arret),
+            "arrivee": arret_to_dict(arrivee_arret),
+            "lignes_depart": [ligne_to_dict(l, detail=True) for l in dep_lines],
+            "lignes_arrivee": [ligne_to_dict(l, detail=True) for l in arr_lines],
+        }, status=404)
 
     return JsonResponse(trajet_to_dict(resultat))
 

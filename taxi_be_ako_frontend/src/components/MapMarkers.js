@@ -140,7 +140,7 @@ export function buildMarkerOffsets(arrets) {
   return offsets;
 }
 
-export function createMapMarkerIcon({ type, mainLabel, subLabel, color, size = 28 }) {
+export function createMapMarkerIcon({ type, mainLabel, subLabel, color, size = 28, offset = null }) {
   const safeMain = String(mainLabel ?? '?');
   const safeSub = subLabel ? String(subLabel) : '';
   const subHtml = safeSub
@@ -154,10 +154,14 @@ export function createMapMarkerIcon({ type, mainLabel, subLabel, color, size = 2
   const luminance = getLuminance(opaqueColor);
   const textColor = luminance > 0.5 ? '#000' : '#fff';
 
+  const offsetStyle = offset
+    ? `transform: translate(${offset.x}px, ${offset.y}px);`
+    : '';
+
   return L.divIcon({
     className: `custom-marker custom-marker-${type}`,
-    html: `<div class="map-marker-wrap" style="--marker-color:${opaqueColor}">
-      <div class="custom-marker-inner" style="background:${opaqueColor};width:${size}px;height:${size}px; color: ${textColor};">${safeMain}</div>
+    html: `<div class="map-marker-wrap" style="--marker-color:${opaqueColor};${offsetStyle}">
+      <div class="custom-marker-inner" title="${safeSub || safeMain}" style="background:${opaqueColor};width:${size}px;height:${size}px; color: ${textColor};">${safeMain}</div>
       ${subHtml}
     </div>`,
     iconSize: [size, size + (safeSub ? 18 : 0)],
@@ -176,7 +180,8 @@ export function createFootstepIcon(index) {
 
 export function FootstepMarkers({ positions }) {
   if (positions.length < 2) return null;
-  const [from, to] = positions;
+  const from = positions[0];
+  const to = positions[positions.length - 1];
   return [0.22, 0.42, 0.62, 0.82].map((ratio, index) => (
     <Marker
       key={`footstep-${ratio}`}
@@ -195,6 +200,9 @@ export function EnhancedTripMarkers({ trajet, arrets, departId, arriveeId }) {
   const departName = trajet.depart?.nom || 'Départ';
   const arriveeName = trajet.arrivee?.nom || 'Arrivée';
 
+  const markerOccurrenceByStop = new Map();
+  const markerIndexByCoord = new Map();
+
   const intermediateMarkers = (trajet.arrets || []).map((step, idx) => {
     const stop = step.arret;
     if (!stop) return null;
@@ -211,23 +219,42 @@ export function EnhancedTripMarkers({ trajet, arrets, departId, arriveeId }) {
     const coords = resolveStopCoords(stop, arrets);
     if (!coords) return null;
 
+    const stopKey = stop.id ? `id:${stop.id}` : `nom:${(stop.nom || '').toLowerCase()}`;
+    const stopOccurrence = markerOccurrenceByStop.get(stopKey) || 0;
+    markerOccurrenceByStop.set(stopKey, stopOccurrence + 1);
+
+    const coordKey = `${coords[0].toFixed(6)}:${coords[1].toFixed(6)}`;
+    const coordOccurrence = markerIndexByCoord.get(coordKey) || 0;
+    markerIndexByCoord.set(coordKey, coordOccurrence + 1);
+
+    const angle = (coordOccurrence * Math.PI) / 2;
+    const offset = coordOccurrence === 0 ? null : {
+      x: Math.round(Math.cos(angle) * 18),
+      y: Math.round(Math.sin(angle) * 18),
+    };
+
     const isCorrespondance = step.est_correspondance || (step.lignes && step.lignes.length > 1);
     const type = isCorrespondance ? 'correspondance' : 'intermediate';
     const stopName = typeof stop.nom === 'string' ? stop.nom : `Arrêt #${stop.id || '?'}`;
     const lineColor = step.lignes?.[0] ? getLineColor(step.lignes[0]) : '#1565C0';
+    const markerLabel =
+      stopOccurrence > 0
+        ? `${idx + 1}/${stopOccurrence + 1}`
+        : idx + 1;
 
     return (
       <Marker
-        key={`intermediate-${stop.id || idx}`}
+        key={`intermediate-${stop.id || stop.nom || 'stop'}-${idx}`}
         position={coords}
         icon={createMapMarkerIcon({
           type,
-          mainLabel: idx + 1,
+          mainLabel: markerLabel,
           subLabel: stopName,
           color: isCorrespondance ? '#FF9800' : lineColor,
           size: isCorrespondance ? 30 : 28,
+          offset,
         })}
-        title={`${idx + 1}. ${stopName}`}
+        title={stopName}
       />
     );
   });
@@ -245,7 +272,7 @@ export function EnhancedTripMarkers({ trajet, arrets, departId, arriveeId }) {
             color: '#4CAF50',
             size: 38,
           })}
-          title={`Départ : ${departName}`}
+          title={departName}
         />
       )}
       {arriveeCoords && (
@@ -259,7 +286,7 @@ export function EnhancedTripMarkers({ trajet, arrets, departId, arriveeId }) {
             color: '#f44336',
             size: 38,
           })}
-          title={`Arrivée : ${arriveeName}`}
+          title={arriveeName}
         />
       )}
       {intermediateMarkers}

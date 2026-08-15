@@ -1,0 +1,2 @@
+Total tested: 500
+Algo failures: 144, Base failures: 144

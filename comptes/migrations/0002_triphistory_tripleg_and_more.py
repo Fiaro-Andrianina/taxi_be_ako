@@ -186,7 +186,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="etapes",
-                        to="comptes.TripHistory",
+                        to="accounts.TripHistory",
                     ),
                 ),
             ],

@@ -14,6 +14,11 @@ from .serializers import (
 )
 
 
+def _is_admin(user):
+    profil = getattr(user, "profil_taxi", None)
+    return bool(profil and profil.role == "admin")
+
+
 def admin_check(request):
     """
     Vérifie si l'utilisateur connecté a le rôle admin.
@@ -32,9 +37,7 @@ def admin_check(request):
             {"is_admin": False, "detail": "Non authentifie"}, status=401
         )
 
-    profil = getattr(request.user, "profil_taxi", None)
-    is_admin = bool(profil and profil.role == "admin")
-    return JsonResponse({"is_admin": is_admin})
+    return JsonResponse({"is_admin": _is_admin(request.user)})
 
 
 @csrf_exempt
@@ -56,6 +59,10 @@ def utilisateurs(request):
         - Autres: Erreur 405
     """
     if request.method == "GET":
+        if not request.user.is_authenticated:
+            return JsonResponse({"detail": "Non authentifie"}, status=401)
+        if not _is_admin(request.user):
+            return JsonResponse({"detail": "Acces refuse"}, status=403)
         users = User.objects.select_related("profil_taxi").all().order_by("username")
         return JsonResponse([user_to_dict(user) for user in users], safe=False)
 
@@ -179,12 +186,15 @@ def utilisateur_detail(request, pk):
         return JsonResponse({"detail": "Utilisateur introuvable"}, status=404)
 
     if request.method == "GET":
+        if not request.user.is_authenticated:
+            return JsonResponse({"detail": "Non authentifie"}, status=401)
+        if request.user.id != user.id and not _is_admin(request.user):
+            return JsonResponse({"detail": "Acces refuse"}, status=403)
         return JsonResponse(user_to_dict(user))
 
-    profil = getattr(request.user, "profil_taxi", None)
-    is_admin = bool(profil and profil.role == "admin")
     if not request.user.is_authenticated:
         return JsonResponse({"detail": "Non authentifie"}, status=401)
+    is_admin = _is_admin(request.user)
     if request.user.id != user.id and not is_admin:
         return JsonResponse({"detail": "Acces refuse"}, status=403)
 
@@ -204,7 +214,8 @@ def utilisateur_detail(request, pk):
         profil = getattr(user, "profil_taxi", None)
         if profil:
             profil.telephone = payload.get("telephone", profil.telephone)
-            profil.role = payload.get("role", profil.role)
+            if is_admin:
+                profil.role = payload.get("role", profil.role)
             profil.adresse = payload.get("adresse", profil.adresse)
             profil.save()
 

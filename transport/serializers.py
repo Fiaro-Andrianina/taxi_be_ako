@@ -142,7 +142,7 @@ def trajet_to_dict(trajet):
         "depart": arret_to_dict(trajet["depart"]),
         "arrivee": arret_to_dict(trajet["arrivee"]),
         "arrets": [etape_to_dict(etape) for etape in trajet["arrets"]],
-        "lignes": [ligne_to_dict(ligne) for ligne in trajet["lignes"]],
+        "lignes": [ligne_to_dict(ligne, detail=True) for ligne in trajet["lignes"]],
         "correspondances": [
             correspondance_to_dict(correspondance)
             for correspondance in trajet["correspondances"]
@@ -151,7 +151,8 @@ def trajet_to_dict(trajet):
         "duree_minutes": trajet["duree_minutes"],
         "distance_km": trajet["distance_km"],
         "distance_marche_km": trajet.get("distance_marche_km", 0),
-        "direct": trajet["nb_changements"] == 0,
+        "direct": trajet.get("direct", trajet["nb_changements"] == 0),
+        "cas": trajet.get("cas", 1 if trajet.get("direct") else 2),
     }
 
 

@@ -39,9 +39,14 @@ export function distanceBetweenPositions(a, b) {
 }
 
 export function interpolatePosition(from, to, ratio) {
+  const f0 = Number(from?.[0]);
+  const f1 = Number(from?.[1]);
+  const t0 = Number(to?.[0]);
+  const t1 = Number(to?.[1]);
+  if (!isFinite(f0) || !isFinite(f1) || !isFinite(t0) || !isFinite(t1)) return from;
   return [
-    from[0] + (to[0] - from[0]) * ratio,
-    from[1] + (to[1] - from[1]) * ratio,
+    f0 + (t0 - f0) * ratio,
+    f1 + (t1 - f1) * ratio,
   ];
 }
 

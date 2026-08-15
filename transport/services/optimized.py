@@ -35,12 +35,66 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
     TRANSFER_PENALTY_MINUTES = 5
     MINUTES_PER_KM = 2.5
     WALK_SPEED_KMH = 5
-    MAX_WALKING_TRANSFER_KM = 0.35
+    MAX_WALKING_TRANSFER_KM = 0.5
 
     # Initialise l'algorithme A* et prépare un cache de correspondances.
     def __init__(self) -> None:
         super().__init__()
         self._correspondance_cache: dict[tuple, Correspondance] = {}
+        self._sequences_par_ligne: dict[int, list[LigneArret]] | None = None
+
+    def _get_sequences_par_ligne(self) -> dict[int, list[LigneArret]]:
+        if self._sequences_par_ligne is None:
+            par_ligne: dict[int, list[LigneArret]] = {}
+            for item in LigneArret.objects.select_related("arret").order_by("ligne_id", "ordre"):
+                par_ligne.setdefault(item.ligne_id, []).append(item)
+            self._sequences_par_ligne = par_ligne
+        return self._sequences_par_ligne
+
+    def _chemin_bus_direct(self, depart_id: int, arrivee_id: int) -> list[Edge] | None:
+        """
+        Cas 1 : un seul bus relie le depart et l'arrivee sur la meme ligne.
+        Retourne le chemin le plus court si plusieurs lignes desservent la paire.
+        """
+        if depart_id == arrivee_id:
+            return []
+
+        meilleur_chemin: list[Edge] | None = None
+        meilleure_distance = float("inf")
+
+        for ligne_id, sequence in self._get_sequences_par_ligne().items():
+            ids = [item.arret_id for item in sequence]
+            if depart_id not in ids or arrivee_id not in ids:
+                continue
+
+            index_depart = ids.index(depart_id)
+            index_arrivee = ids.index(arrivee_id)
+            if index_depart == index_arrivee:
+                continue
+
+            chemin: list[Edge] = []
+            distance = 0.0
+            if index_depart < index_arrivee:
+                indices = range(index_depart, index_arrivee)
+                for index in indices:
+                    depart = sequence[index].arret
+                    arrivee = sequence[index + 1].arret
+                    segment = calculer_distance(depart, arrivee)
+                    distance += segment
+                    chemin.append(Edge(arrivee.id, ligne_id, segment))
+            else:
+                for index in range(index_depart, index_arrivee, -1):
+                    depart = sequence[index].arret
+                    arrivee = sequence[index - 1].arret
+                    segment = calculer_distance(depart, arrivee)
+                    distance += segment
+                    chemin.append(Edge(arrivee.id, ligne_id, segment))
+
+            if distance < meilleure_distance:
+                meilleure_distance = distance
+                meilleur_chemin = chemin
+
+        return meilleur_chemin
 
     # Étend le graphe existant avec des arêtes piétonnes entre arrêts proches.
     def construire_graphe(self):
@@ -58,8 +112,10 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
                     continue
 
                 # On garde la marche pour les vrais raccourcis de correspondance:
-                # deux arrets proches mais pas exactement desservis par les memes lignes.
-                if lignes_par_arret.get(depart.id) == lignes_par_arret.get(arrivee.id):
+                # deux arrets proches mais pas desservis par la meme ligne.
+                lignes_depart = lignes_par_arret.get(depart.id)
+                lignes_arrivee = lignes_par_arret.get(arrivee.id)
+                if lignes_depart and lignes_arrivee and lignes_depart & lignes_arrivee:
                     continue
 
                 graphe[depart.id].append(Edge(arrivee.id, None, distance, "walk"))
@@ -100,7 +156,8 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
             correspondances.append(correspondance)
         return correspondances
 
-    # Exécute l'algorithme A* pour rechercher le chemin de coût minimum.
+    # Algorithme A* (proche de Dijkstra) - trouve le chemin de COÛT MINIMAL.
+    # Le coût = distance + pénalité pour changement de ligne.
     def dijkstra(self, start_id, end_id):
         """
         Algorithme A* pour trouver le chemin de coût minimal.
@@ -115,6 +172,8 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
         Raises:
             TrajetIntrouvable: Si aucun chemin n'existe
         """
+        # g_score = coût réel du chemin depuis le départ jusqu'à ce nœud.
+        # Le tas (heap) explore d'abord les nœuds avec f_score (g_score + heuristique) le plus petit.
         start_state: SearchState = (start_id, None)
         g_score: dict[SearchState, float] = {start_state: 0.0}
         parents: dict[SearchState, tuple[SearchState, Edge]] = {}
@@ -133,11 +192,16 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
                 return self._reconstruire_chemin(parents, start_state, state)
 
             for edge in self.graphe.get(courant, []):
+                # Marche à pied : on calcule le temps en divisant la distance par la vitesse piétonne.
+                # On limite à 500m et on n'autorise pas plusieurs marches successives.
                 if edge.mode == "walk":
+                    if ligne_courante is None and courant != start_id:
+                        continue
                     edge_minutes = (edge.distance_km / self.WALK_SPEED_KMH) * 60
                     tentative_g = g_courant + edge_minutes
                     next_state: SearchState = (edge.destination_id, None)
                     next_line_encoded = NO_LINE
+                # Bus : le coût est la distance + 5 min de pénalité si changement de ligne.
                 else:
                     if edge.ligne_id is None:
                         continue
@@ -153,10 +217,18 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
                 if tentative_g < g_score.get(next_state, float("inf")):
                     parents[next_state] = (state, edge)
                     g_score[next_state] = tentative_g
-                    h = calculer_distance(
-                        self.arrets[edge.destination_id],
-                        self.arrets[end_id],
-                    ) * self.MINUTES_PER_KM
+                    # Heuristique (distance restante) : on estime le temps jusqu'à destination.
+                    # On utilise la vitesse bus (vitesse moyenne) ou piétonne selon le mode.
+                    if next_line_encoded == NO_LINE:
+                        h = calculer_distance(
+                            self.arrets[edge.destination_id],
+                            self.arrets[end_id],
+                        ) / self.WALK_SPEED_KMH * 60
+                    else:
+                        h = calculer_distance(
+                            self.arrets[edge.destination_id],
+                            self.arrets[end_id],
+                        ) * self.MINUTES_PER_KM
                     f_score = tentative_g + h
                     heappush(heap, (f_score, tentative_g, edge.destination_id, next_line_encoded))
 
@@ -212,6 +284,7 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
         if depart_id not in self.arrets or arrivee_id not in self.arrets:
             raise TrajetIntrouvable("Arret introuvable")
 
+        # On calcule systématiquement via A* pour obtenir le trajet globalement le plus court.
         chemin = self.dijkstra(depart_id, arrivee_id)
         if not chemin:
             raise TrajetIntrouvable("Aucun trajet disponible")
@@ -225,7 +298,6 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
         distance_km = round(sum(edge.distance_km for edge in chemin), 2)
         walking_distance_km = sum(edge.distance_km for edge in chemin if edge.mode == "walk")
         correspondances = self.trouver_correspondances(chemin)
-        walking_transfers = sum(1 for edge in chemin if edge.mode == "walk")
         bus_distance_km = distance_km - walking_distance_km
         duree_minutes = max(
             1,
@@ -239,12 +311,14 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
         historique = TrajetHistorique.objects.create(
             depart_id=depart_id,
             arrivee_id=arrivee_id,
-            nb_changements=len(correspondances) + walking_transfers,
+            nb_changements=len(correspondances),
             duree_minutes=duree_minutes,
             distance_km=distance_km,
         )
         historique.lignes.set(ligne_ids)
         historique.correspondances.set(correspondances)
+
+        est_direct = len(correspondances) == 0 and walking_distance_km == 0
 
         return {
             "depart": self.arrets[depart_id],
@@ -253,10 +327,12 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
             "lignes": [self.lignes[ligne_id] for ligne_id in ligne_ids],
             "correspondances": correspondances,
             "historique": historique,
-            "nb_changements": len(correspondances) + walking_transfers,
+            "nb_changements": len(correspondances),
             "duree_minutes": duree_minutes,
             "distance_km": distance_km,
             "distance_marche_km": round(walking_distance_km, 2),
+            "direct": est_direct,
+            "cas": 1 if est_direct else 2,
         }
 
     # Formate les arrêts et les lignes du chemin A* pour l'affichage dans l'interface.
@@ -279,14 +355,38 @@ class AlgorithmeSearchOptimized(AlgorithmeSearchBaseline):
                     "duree_minutes": max(1, round((prev_edge.distance_km / self.WALK_SPEED_KMH) * 60)),
                 }
 
-            for edge in (prev_edge, next_edge):
-                if edge and edge.ligne_id is not None and self.lignes[edge.ligne_id] not in lignes:
-                    lignes.append(self.lignes[edge.ligne_id])
+            # Pour le premier arrêt: montrer la ligne du premier segment bus
+            if i == 0:
+                if next_edge:
+                    if next_edge.ligne_id is not None and next_edge.mode != "walk":
+                        lignes.append(self.lignes[next_edge.ligne_id])
+                    elif next_edge.mode == "walk":
+                        # Marche initiale: chercher la première ligne bus après
+                        for future_edge in chemin:
+                            if future_edge.ligne_id is not None:
+                                lignes.append(self.lignes[future_edge.ligne_id])
+                                break
+            # Pour le dernier arrêt: montrer la ligne du dernier segment bus
+            elif i == len(arret_ids) - 1:
+                if prev_edge and prev_edge.ligne_id is not None and prev_edge.mode != "walk":
+                    lignes.append(self.lignes[prev_edge.ligne_id])
+                elif prev_edge and prev_edge.mode == "walk":
+                    # Marche finale: chercher la dernière ligne bus avant
+                    for past_edge in reversed(chemin[:i]):
+                        if past_edge.ligne_id is not None:
+                            lignes.append(self.lignes[past_edge.ligne_id])
+                            break
+            # Pour les arrêts intermédiaires
+            else:
+                if prev_edge and prev_edge.ligne_id is not None and prev_edge.mode != "walk":
+                    lignes.append(self.lignes[prev_edge.ligne_id])
+                if next_edge and next_edge.ligne_id is not None and next_edge.mode != "walk":
+                    if next_edge.ligne_id not in [e.id for e in lignes]:
+                        lignes.append(self.lignes[next_edge.ligne_id])
 
-            if prev_edge and next_edge:
-                if prev_edge.mode == "walk" or next_edge.mode == "walk":
-                    est_correspondance = True
-                elif prev_edge.ligne_id != next_edge.ligne_id:
+            # Détecter les changements de ligne (pas les marches)
+            if prev_edge and next_edge and prev_edge.mode != "walk" and next_edge.mode != "walk":
+                if prev_edge.ligne_id != next_edge.ligne_id:
                     est_correspondance = True
 
             etape = {

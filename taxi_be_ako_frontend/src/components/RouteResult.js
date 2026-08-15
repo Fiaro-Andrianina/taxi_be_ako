@@ -5,6 +5,9 @@ export default function RouteResult({ trajet, t, onHighlightLine, highlightedLin
   const direct = isDirectTrip(trajet);
   const segments = parseTrajetSegments(trajet);
   const steps = [];
+  const traversedStops = (trajet?.arrets || [])
+    .map((step) => step?.arret)
+    .filter(Boolean);
 
   if (direct) {
     const mainSegment = segments.length === 1
@@ -211,7 +214,7 @@ export default function RouteResult({ trajet, t, onHighlightLine, highlightedLin
            );
          }
 
-         if (step.type === 'walk' && !direct) {
+          if (step.type === 'walk' && !direct) {
            const fromName = getSafeStopName(step.from);
            const toName = getSafeStopName(step.to);
            const walkDuration = step.durationMinutes ? `${step.durationMinutes} min` : 'quelques minutes';
@@ -221,10 +224,10 @@ export default function RouteResult({ trajet, t, onHighlightLine, highlightedLin
              <div key={index} className="instruction-walk highlight-walk">
                <span className="walk-icon">👣</span>
                <div>
-                 <strong>Marchez un peu</strong>
+                 <strong>{t.marche_correspondance || 'Marche (Correspondance)'}</strong>
                  <div className="transfer-details">
                    <span>
-                     Descendez à {fromName}, marchez jusqu'à {toName} ({walkDistance}, {walkDuration}){hasBusAfter ? ', puis prenez le bus suivant.' : '.'}
+                     {t.descendez_a || 'Descendez à'} {fromName}, {t.marchez_jusqua || 'marchez jusqu\'à'} {toName} ({walkDistance}, {walkDuration}){hasBusAfter ? (t.puis_prenez_bus || ', puis prenez le bus suivant.') : '.'}
                    </span>
                  </div>
                </div>
@@ -235,6 +238,29 @@ export default function RouteResult({ trajet, t, onHighlightLine, highlightedLin
          return null;
        })}
      </div>
+
+     {traversedStops.length > 0 && (
+       <div className="route-traversed-stops">
+         <strong>{t.arrets_traverses || 'Arrêts traversés'} :</strong>
+         <div className="segment-stops">
+           {traversedStops.map((stop, index) => {
+             const isDepart = index === 0;
+             const isArrivee = index === traversedStops.length - 1;
+             return (
+               <div
+                 key={`${stop.id || stop.nom || 'stop'}-${index}`}
+                 className={`segment-stop ${isDepart ? 'stop-depart' : isArrivee ? 'stop-arrivee' : ''}`}
+               >
+                 <span className="stop-order-badge">{index + 1}</span>
+                 <span>{getSafeStopName(stop)}</span>
+                 {isDepart && <em className="stop-role">{t.depart || 'Départ'}</em>}
+                 {isArrivee && <em className="stop-role">{t.destination || 'Arrivée'}</em>}
+               </div>
+             );
+           })}
+         </div>
+       </div>
+     )}
    </div>
   );
 }

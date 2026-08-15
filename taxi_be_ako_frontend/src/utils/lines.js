@@ -34,7 +34,7 @@ export function hashLineColor(value) {
 export function getLineColor(lineOrNumero) {
   const numero = typeof lineOrNumero === 'object' ? lineOrNumero?.numero : lineOrNumero;
   const customColor = typeof lineOrNumero === 'object' ? lineOrNumero?.couleur : null;
-  if (customColor) return customColor;
+  if (customColor && /^#[0-9a-f]{3,6}$/i.test(customColor)) return customColor;
 
   const colors = {
     '119': '#1976D2',
@@ -55,16 +55,19 @@ export function getLineColor(lineOrNumero) {
 
 export function isDirectTrip(trajet) {
   if (!trajet) return false;
-  if (trajet.direct === true) return true;
-  return (trajet.nb_changements || 0) === 0;
+  // Cas 1 explicite depuis le backend
+  if (trajet.cas === 1) return true;
+  // Direct uniquement si aucun changement ET aucune marche
+  if (trajet.direct === true && (trajet.distance_marche_km ?? 0) === 0) return true;
+  return (trajet.nb_changements || 0) === 0 && (trajet.distance_marche_km ?? 0) === 0;
 }
 
 export function lineContainsStop(line, stopId, stopName) {
   return getLineStops(line).some((item) => {
     const a = item.arret || item;
-    if (stopId && a.id === stopId) return true;
-    if (stopName && a.nom) {
-      const normalizedStop = normalizeSearchValue(a.nom);
+    if (stopId && a?.id === stopId) return true;
+    if (stopName) {
+      const normalizedStop = normalizeSearchValue(getStopNameValue(a));
       const normalizedName = normalizeSearchValue(stopName);
       return normalizedStop === normalizedName || normalizedStop.includes(normalizedName);
     }
@@ -85,19 +88,28 @@ export function findStopByName(arrets, stopName) {
   const exactMatch = normalizedStops.find((entry) => entry.name === normalizedTarget);
   if (exactMatch) return exactMatch.item;
 
-  const startsWithMatch = normalizedStops.find((entry) => entry.name.startsWith(normalizedTarget));
-  if (startsWithMatch) return startsWithMatch.item;
+  const startsWithMatches = normalizedStops.filter((entry) => entry.name.startsWith(normalizedTarget));
+  if (startsWithMatches.length > 0) {
+    return startsWithMatches.reduce((best, entry) => (
+      entry.name.length < best.name.length ? entry : best
+    )).item;
+  }
 
-  const containsMatch = normalizedStops.find((entry) => entry.name.includes(normalizedTarget));
-  if (containsMatch) return containsMatch.item;
+  const containsMatches = normalizedStops.filter((entry) => entry.name.includes(normalizedTarget));
+  if (containsMatches.length > 0) {
+    return containsMatches.reduce((best, entry) => (
+      entry.name.length < best.name.length ? entry : best
+    )).item;
+  }
 
-  return normalizedStops[0]?.item || null;
+  return null;
 }
 
 export function getStopKey(stop) {
   if (!stop) return null;
+  if (typeof stop === 'string') return `nom:${normalizeSearchValue(stop)}`;
   if (stop.id) return `id:${stop.id}`;
-  if (stop.nom) return `nom:${stop.nom.toLowerCase()}`;
+  if (stop.nom) return `nom:${normalizeSearchValue(stop.nom)}`;
   return null;
 }
 
@@ -174,43 +186,41 @@ export function scoreAlternative(alt, depStop, arrStop) {
   const departStops = lineStopList(alt.departLine);
   const arriveeStops = lineStopList(alt.arriveeLine);
   const transferKey = getStopKey(alt.transferStop);
+  const depKey = getStopKey(depStop);
+  const arrKey = getStopKey(arrStop);
 
-  const boardIdx = departStops.findIndex((s) => getStopKey(s) === transferKey);
-  const boardCandidates = boardIdx >= 0
-    ? departStops.slice(0, boardIdx + 1)
-    : departStops;
-  const boardStop =
-    boardCandidates.reduce((best, s) => {
-      const d = haversineKm(depStop, s);
-      return d < best.d ? { stop: s, d } : best;
-    }, { stop: departStops[0], d: Infinity }).stop || departStops[0];
+  const depIdx = departStops.findIndex((s) => getStopKey(s) === depKey);
+  const transferDepIdx = departStops.findIndex((s) => getStopKey(s) === transferKey);
+  const transferArrIdx = arriveeStops.findIndex((s) => getStopKey(s) === transferKey);
+  const arrIdx = arriveeStops.findIndex((s) => getStopKey(s) === arrKey);
 
-  const alightIdx = arriveeStops.findIndex((s) => getStopKey(s) === transferKey);
-  const alightCandidates = alightIdx >= 0 ? arriveeStops.slice(alightIdx) : arriveeStops;
-  const alightStop =
-    alightCandidates.reduce((best, s) => {
-      const d = haversineKm(arrStop, s);
-      return d < best.d ? { stop: s, d } : best;
-    }, { stop: arriveeStops[arriveeStops.length - 1], d: Infinity }).stop ||
-    arriveeStops[arriveeStops.length - 1];
+  if (depIdx < 0 || transferDepIdx < 0 || depIdx >= transferDepIdx) return Infinity;
+  if (transferArrIdx < 0 || arrIdx < 0 || transferArrIdx > arrIdx) return Infinity;
 
-  const walkDepKm = haversineKm(depStop, boardStop);
-  const walkArrKm = haversineKm(arrStop, alightStop);
+  const boardStop = depStop;
+  const alightStop = arrStop;
   const bus1Km = haversineKm(boardStop, alt.transferStop);
   const bus2Km = haversineKm(alt.transferStop, alightStop);
 
-  const walkMin = ((walkDepKm + walkArrKm) / 5) * 60;
+  if (bus1Km < 0.005 || bus2Km < 0.005) {
+    return Infinity;
+  }
+
   const busMin = ((bus1Km + bus2Km) / 18) * 60;
   const transferPenalty = 5;
 
   return {
-    totalMinutes: Math.round(walkMin + busMin + transferPenalty),
-    distanceKm: Math.round((walkDepKm + walkArrKm + bus1Km + bus2Km) * 10) / 10,
-    walkMinutes: Math.round((walkDepKm + walkArrKm) / 5 * 60),
+    totalMinutes: Math.round(busMin + transferPenalty),
+    distanceKm: Math.round((bus1Km + bus2Km) * 10) / 10,
+    walkMinutes: 0,
+    walkDepMinutes: 0,
+    walkArrMinutes: 0,
+    walkDepKm: 0,
+    walkArrKm: 0,
     nbChangements: 1,
     boardStop,
     alightStop,
-    score: walkMin + busMin + transferPenalty,
+    score: busMin + transferPenalty,
   };
 }
 
@@ -224,32 +234,59 @@ export function sortAlternativesByScore(alternatives, depStop, arrStop) {
     .sort((a, b) => a.metrics.score - b.metrics.score);
 }
 
-export function findTransferAlternatives(depLines, arrLines, limit = 4) {
+function resolveStopReference(stop, arrets) {
+  if (!stop) return null;
+  if (typeof stop === 'string') {
+    return findStopByName(arrets, stop);
+  }
+  if (stop.id) {
+    return arrets.find((a) => a.id === stop.id) || findStopByName(arrets, stop.nom);
+  }
+  return findStopByName(arrets, stop.nom);
+}
+
+export function findTransferAlternatives(depLines, arrLines, depStop, arrStop, arrets, limit = 4) {
   const alternatives = [];
   const seen = new Set();
+  const depKey = getStopKey(depStop);
+  const arrKey = getStopKey(arrStop);
 
   depLines.forEach((departLine) => {
     const departStops = getLineStops(departLine).map((item) => item.arret || item);
+    const depIdx = departStops.findIndex((stop) => getStopKey(stop) === depKey);
+    if (depIdx < 0) return;
+
     arrLines.forEach((arriveeLine) => {
       if (departLine.id === arriveeLine.id) return;
 
+      const arriveeStops = getLineStops(arriveeLine).map((item) => item.arret || item);
+      const arrIdx = arriveeStops.findIndex((stop) => getStopKey(stop) === arrKey);
+      if (arrIdx < 0) return;
+
       const arriveeStopsByKey = new Map(
-        getLineStops(arriveeLine)
-          .map((item) => item.arret || item)
-          .map((stop) => [getStopKey(stop), stop])
-          .filter(([key]) => key)
+        arriveeStops.map((stop) => [getStopKey(stop), stop]).filter(([key]) => key)
       );
 
-      const transferStop = departStops.find((stop) => arriveeStopsByKey.has(getStopKey(stop)));
-      if (!transferStop) return;
+      const commonTransferStops = departStops.filter((stop) => arriveeStopsByKey.has(getStopKey(stop)));
+      if (!commonTransferStops.length) return;
 
-      const key = `${departLine.id}-${arriveeLine.id}-${getStopKey(transferStop)}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      alternatives.push({
-        departLine,
-        arriveeLine,
-        transferStop,
+      commonTransferStops.forEach((transferStop) => {
+        const transferIdx = departStops.findIndex((stop) => getStopKey(stop) === getStopKey(transferStop));
+        const transferArrIdx = arriveeStops.findIndex((stop) => getStopKey(stop) === getStopKey(transferStop));
+        if (transferIdx < 0 || transferArrIdx < 0) return;
+        if (depIdx >= transferIdx || transferArrIdx > arrIdx) return;
+
+        const transferStopObj = resolveStopReference(transferStop, arrets);
+        if (!transferStopObj) return;
+
+        const key = `${departLine.id}-${arriveeLine.id}-${getStopKey(transferStopObj)}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        alternatives.push({
+          departLine,
+          arriveeLine,
+          transferStop: transferStopObj,
+        });
       });
     });
   });
@@ -263,8 +300,13 @@ function resolveRouteStop(arrets, departRef) {
   if (!Number.isNaN(asId) && asId > 0) {
     return arrets.find((a) => a.id === asId) || null;
   }
-  const name = String(departRef).trim();
-  return arrets.find((a) => a.nom?.toLowerCase() === name.toLowerCase()) || null;
+  const name = normalizeSearchValue(String(departRef).trim());
+  if (!name) return null;
+  return (
+    arrets.find((a) => normalizeSearchValue(a.nom || '') === name) ||
+    arrets.find((a) => normalizeSearchValue(a.nom || '').includes(name)) ||
+    null
+  );
 }
 
 export function suggestLinesForRoute(lignes, departRef, arriveeRef, arrets) {
@@ -274,27 +316,16 @@ export function suggestLinesForRoute(lignes, departRef, arriveeRef, arrets) {
     return { depLines: [], arrLines: [], alternatives: [], depStop: dep, arrStop: arr };
   }
 
-  const WALKING_THRESHOLD_KM = 2.5;
-  const depNeighbors = arrets.filter((stop) => haversineKm(dep, stop) <= WALKING_THRESHOLD_KM);
-  const arrNeighbors = arrets.filter((stop) => haversineKm(arr, stop) <= WALKING_THRESHOLD_KM);
+  const depLines = lignes.filter((l) => lineContainsStop(l, dep.id, dep.nom));
+  const arrLines = lignes.filter((l) => lineContainsStop(l, arr.id, arr.nom));
 
-  const depLines = lignes.filter((l) =>
-    depNeighbors.some((stop) => lineContainsStop(l, stop.id, stop.nom))
-  );
-  const arrLines = lignes.filter((l) =>
-    arrNeighbors.some((stop) => lineContainsStop(l, stop.id, stop.nom))
-  );
-
-  const rawAlternatives = findTransferAlternatives(depLines, arrLines, 24);
+  const rawAlternatives = findTransferAlternatives(depLines, arrLines, dep, arr, arrets, 24);
   const alternatives = sortAlternativesByScore(rawAlternatives, dep, arr).slice(0, 6);
 
   return { depLines, arrLines, alternatives, depStop: dep, arrStop: arr };
 }
 
-function estimateWalkMinutes(distanceKm, walkSpeedKmh = 5) {
-  if (!Number.isFinite(distanceKm) || distanceKm <= 0) return 0;
-  return Math.max(1, Math.round((distanceKm / walkSpeedKmh) * 60));
-}
+
 
 function asFloatOrZero(v) {
   const n = typeof v === 'number' ? v : Number(v);
@@ -305,8 +336,8 @@ function asFloatOrZero(v) {
  * Convertit une alternative (2 lignes + arrêt de correspondance) en objet `trajet`
  * compatible avec l'affichage carte (TripRouteLayers) et l'instruction (RouteResult).
  *
- * Note: on modélise le trajet par segments bus + 2 segments marche (départ/arrivée)
- * quand `depStop -> boardStop` et `alightStop -> arrStop` ne sont pas les mêmes.
+ * Cas 2 : bus 1 (depart -> correspondance), bus 2 (correspondance -> arrivee).
+ * Pas de marche au depart ni a l'arrivee : l'utilisateur a deja choisi les arrets A et B.
  */
 export function buildTrajetFromAlternative({ alternative, depStop, arrStop }) {
   if (!alternative || !depStop || !arrStop) return null;
@@ -316,47 +347,10 @@ export function buildTrajetFromAlternative({ alternative, depStop, arrStop }) {
   const transferStop = alternative.transferStop;
   const metrics = alternative.metrics || {};
 
-  // Métriques issues de scoreAlternative(): elles contiennent boardStop/alightStop.
-  const boardStop =
-    metrics.boardStop ||
-    departLine?.arrets?.[0]?.arret ||
-    getLineStops(departLine)?.[0]?.arret ||
-    null;
-  const alightStop =
-    metrics.alightStop ||
-    arriveeLine?.arrets?.slice(-1)?.[0]?.arret ||
-    null;
+  const boardStop = metrics.boardStop || depStop;
+  const alightStop = metrics.alightStop || arrStop;
 
   if (!departLine || !arriveeLine || !transferStop || !boardStop || !alightStop) return null;
-
-  const getSameStop = (a, b) => {
-    if (!a || !b) return false;
-    if (a.id && b.id) return a.id === b.id;
-    if (a.nom && b.nom) return String(a.nom).toLowerCase() === String(b.nom).toLowerCase();
-    return false;
-  };
-
-  const walkingDepKm = haversineKm(depStop, boardStop);
-  const walkingArrKm = haversineKm(alightStop, arrStop);
-
-  const walkDepDurationMin = estimateWalkMinutes(walkingDepKm, 5);
-  const walkArrDurationMin = estimateWalkMinutes(walkingArrKm, 5);
-
-  const departStep = getSameStop(boardStop, depStop)
-    ? { arret: boardStop, lignes: [departLine] }
-    : { arret: depStop, lignes: [] };
-
-  const firstWalkStep = getSameStop(boardStop, depStop)
-    ? null
-    : {
-        arret: boardStop,
-        mode: 'walk',
-        lignes: [departLine], // Ligne à prendre après la marche
-        marche: {
-          distance_km: asFloatOrZero(walkingDepKm),
-          duree_minutes: walkDepDurationMin,
-        },
-      };
 
   const transferStep = {
     arret: transferStop,
@@ -364,28 +358,10 @@ export function buildTrajetFromAlternative({ alternative, depStop, arrStop }) {
     est_correspondance: true,
   };
 
-  const afterTransferBusStep = getSameStop(alightStop, transferStop)
-    ? null
-    : { arret: alightStop, lignes: [arriveeLine] };
-
-  const lastWalkStep = getSameStop(alightStop, arrStop)
-    ? null
-    : {
-        arret: arrStop,
-        mode: 'walk',
-        lignes: [], // Fin: plus de bus après l'arrivée
-        marche: {
-          distance_km: asFloatOrZero(walkingArrKm),
-          duree_minutes: walkArrDurationMin,
-        },
-      };
-
   const arrets = [
-    departStep,
-    ...(firstWalkStep ? [firstWalkStep] : []),
+    { arret: boardStop, lignes: [departLine] },
     transferStep,
-    ...(afterTransferBusStep ? [afterTransferBusStep] : []),
-    ...(lastWalkStep ? [lastWalkStep] : []),
+    { arret: alightStop, lignes: [arriveeLine] },
   ];
 
   const lignes = [departLine, arriveeLine].filter(Boolean);
@@ -415,25 +391,35 @@ export function parseTrajetSegments(trajet) {
     const previousStep = trajet.arrets[idx - 1];
     const role = idx === 0 ? 'depart' : idx === trajet.arrets.length - 1 ? 'arrivee' : 'intermediate';
 
-    if (step.mode === 'walk' && previousStep?.arret) {
+    // Gestion des étapes marche (format backend: marche est sur l'arrêt d'arrivée)
+    if (step.mode === 'walk' && step.marche) {
       if (current) {
         segments.push(current);
         current = null;
       }
+      // Marche depuis l'arrêt précédent ou depuis le départ du trajet
+      const fromStop = previousStep?.arret || trajet.depart;
       segments.push({
         mode: 'walk',
-        from: previousStep.arret,
+        from: fromStop,
         to: step.arret,
         distanceKm: step.marche?.distance_km,
         durationMinutes: step.marche?.duree_minutes,
       });
 
+      // Si la marche amène à destination, ne pas créer de segment bus vide
+      if (role === 'arrivee') {
+        current = null;
+        return;
+      }
+
+      // Continuer avec la ligne suivante si présente
       const nextLine = lines[0];
       if (nextLine) {
         current = {
           line: nextLine,
           color: getLineColor(nextLine),
-          stops: [{ arret: step.arret, ordre: idx + 1, role: role === 'arrivee' ? 'arrivee' : 'correspondance' }],
+          stops: [{ arret: step.arret, ordre: idx + 1, role: 'correspondance' }],
         };
       }
       return;
@@ -442,6 +428,14 @@ export function parseTrajetSegments(trajet) {
     const isTransfer = step.est_correspondance || lines.length > 1;
 
     if (isTransfer && lines.length > 1) {
+      if (role === 'arrivee') {
+        if (current) {
+          current.stops.push({ arret: step.arret, ordre: idx + 1, role: 'arrivee' });
+          segments.push(current);
+          current = null;
+        }
+        return;
+      }
       if (current) {
         current.stops.push({ arret: step.arret, ordre: idx + 1, role: 'correspondance' });
         segments.push(current);
@@ -456,7 +450,20 @@ export function parseTrajetSegments(trajet) {
 
     const line = lines[0];
     if (!line) {
-      if (current) current.stops.push({ arret: step.arret, ordre: idx + 1, role });
+      // Cas trajet direct : utiliser la ligne du trajet si disponible
+      const trajetLine = trajet?.lignes?.[0];
+      if (trajetLine) {
+        if (!current) {
+          current = {
+            line: trajetLine,
+            color: getLineColor(trajetLine),
+            stops: [],
+          };
+        }
+        current.stops.push({ arret: step.arret, ordre: idx + 1, role });
+      } else if (current) {
+        current.stops.push({ arret: step.arret, ordre: idx + 1, role });
+      }
       return;
     }
 
@@ -488,24 +495,25 @@ export function buildLocalTrajet(lignes, arrets, departId, arriveeId) {
 
     const sliceStart = Math.min(firstIdx, lastIdx);
     const sliceEnd = Math.max(firstIdx, lastIdx);
-    const lineStops = getLineStops(line);
-    let slicedStops = lineStops.slice(sliceStart, sliceEnd + 1);
+    const lineStops = getLineStops(line).map((item) => item.arret || item);
+    const resolvedStops = lineStops
+      .map((stop) => (typeof stop === 'string' ? findStopByName(arrets, stop) : stop))
+      .filter(Boolean);
+    let slicedStops = resolvedStops.slice(sliceStart, sliceEnd + 1);
     if (firstIdx > lastIdx) slicedStops = [...slicedStops].reverse();
 
     let distanceKm = 0;
     for (let i = 1; i < slicedStops.length; i += 1) {
-      const fromStop = slicedStops[i - 1].arret || slicedStops[i - 1];
-      const toStop = slicedStops[i].arret || slicedStops[i];
-      const fromCoords = arrets.find((a) => a.id === fromStop.id) || fromStop;
-      const toCoords = arrets.find((a) => a.id === toStop.id) || toStop;
+      const fromCoords = slicedStops[i - 1];
+      const toCoords = slicedStops[i];
       distanceKm += haversineKm(fromCoords, toCoords);
     }
 
     return {
       depart: depStop,
       arrivee: arrStop,
-      arrets: slicedStops.map((item) => ({
-        arret: item.arret || item,
+      arrets: slicedStops.map((stop) => ({
+        arret: stop,
         lignes: [line],
         est_correspondance: false,
       })),
@@ -531,7 +539,15 @@ export function findFullLine(line, lignes) {
 export function getLineStopIndex(line, stop) {
   const key = getStopKey(stop);
   if (!line || !key) return -1;
-  return getLineStops(line).findIndex((item) => getStopKey(item.arret || item) === key);
+
+  return getLineStops(line).findIndex((item) => {
+    const candidate = item.arret || item;
+    const candidateKey = getStopKey(candidate);
+    if (candidateKey === key) return true;
+    const candidateName = normalizeSearchValue(getStopNameValue(candidate));
+    const stopName = normalizeSearchValue(getStopNameValue(stop));
+    return Boolean(candidateName && stopName && (candidateName === stopName || candidateName.includes(stopName)));
+  });
 }
 
 export function getSyncedStopCoords(stop, arrets) {
@@ -552,4 +568,31 @@ export function getSyncedStopCoords(stop, arrets) {
     return [lat, lng];
   }
   return null;
+}
+
+/**
+ * Construit les suggestions d'alternatives à partir de la réponse 404 enrichie du backend (Cas 3).
+ * Le backend retourne les lignes au départ et à l'arrivée avec leurs arrêts détaillés.
+ */
+export function buildSuggestionsFromBackend404(errorData, arrets) {
+  if (!errorData) return null;
+
+  const depStop = errorData.depart
+    ? arrets.find((a) => a.id === errorData.depart.id) || errorData.depart
+    : null;
+  const arrStop = errorData.arrivee
+    ? arrets.find((a) => a.id === errorData.arrivee.id) || errorData.arrivee
+    : null;
+
+  const depLines = errorData.lignes_depart || [];
+  const arrLines = errorData.lignes_arrivee || [];
+
+  if (!depStop || !arrStop) {
+    return { depLines, arrLines, alternatives: [], depStop, arrStop };
+  }
+
+  const rawAlternatives = findTransferAlternatives(depLines, arrLines, depStop, arrStop, 24);
+  const alternatives = sortAlternativesByScore(rawAlternatives, depStop, arrStop).slice(0, 6);
+
+  return { depLines, arrLines, alternatives, depStop, arrStop };
 }
